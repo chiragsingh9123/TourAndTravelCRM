@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+{% block title %}Bookings — Travel CRM{% endblock %}
+{% block nav_bookings %}active{% endblock %}
+{% block nav_bookings2 %}active{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Bookings</h1>
+    <div class="sub">All confirmed tour bookings</div>
+  </div>
+</div>
+
+<div class="stats-grid" style="margin-bottom:20px">
+  <div class="stat-card green">
+    <div class="stat-label">Total Bookings</div>
+    <div class="stat-value" id="total-bookings">—</div>
+    <i class="fas fa-ticket stat-icon"></i>
+  </div>
+  <div class="stat-card purple">
+    <div class="stat-label">Total Revenue</div>
+    <div class="stat-value" id="total-revenue" style="font-size:18px">—</div>
+    <i class="fas fa-indian-rupee-sign stat-icon"></i>
+  </div>
+  <div class="stat-card orange">
+    <div class="stat-label">Advance Collected</div>
+    <div class="stat-value" id="total-advance" style="font-size:18px">—</div>
+    <i class="fas fa-coins stat-icon"></i>
+  </div>
+  <div class="stat-card red">
+    <div class="stat-label">Balance Pending</div>
+    <div class="stat-value" id="total-balance" style="font-size:18px">—</div>
+    <i class="fas fa-clock stat-icon"></i>
+  </div>
+</div>
+
+<div class="card" style="padding:0; overflow:hidden">
+  <div style="padding:16px 20px; border-bottom:1px solid var(--border); display:flex; gap:10px; align-items:center">
+    <input type="text" class="filter-input" id="bk-search" placeholder="Search booking ID, customer..." style="min-width:240px">
+    <span style="color:var(--text3); font-size:12px; margin-left:auto" id="bk-count"></span>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Booking ID</th><th>Customer</th><th>Tour Package</th><th>Travel Date</th>
+          <th>Total</th><th>Advance</th><th>Balance</th><th>Method</th>
+          <th>Staff</th><th>Date</th><th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="bookings-tbody">
+        <tr><td colspan="11"><div class="loading"><div class="spinner"></div> Loading...</div></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div style="padding:16px 20px; border-top:1px solid var(--border); display:flex; gap:8px; flex-wrap:wrap; align-items:center" id="bk-pagination"></div>
+</div>
+
+<div class="modal-overlay" id="payment-modal">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <div class="modal-title">Add Payment</div>
+      <button class="modal-close" onclick="closePaymentModal()">&times;</button>
+    </div>
+    <div id="payment-booking-info" style="background:var(--surface2); border-radius:8px; padding:12px; margin-bottom:16px; font-size:13px"></div>
+    <div class="form-grid">
+      <div class="form-group"><label>Amount (₹)</label><input type="number" class="form-control" id="pay-amount"></div>
+      <div class="form-group"><label>Method</label>
+        <select class="form-control" id="pay-method">
+          <option>Cash</option><option>UPI</option><option>Bank Transfer</option><option>Cheque</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Date</label><input type="date" class="form-control" id="pay-date"></div>
+    </div>
+    <textarea class="form-control" id="pay-notes" rows="2" placeholder="Notes..."></textarea>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closePaymentModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitPayment()">Add Payment</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+var BK_API = '{{ API_BASE }}';
+var allBookings = [];
+var currentPaymentBookingId = null;
+var currentPage = 1;
+
+/* Use window.onload — fires after ALL scripts (including base.html) are done */
+window.addEventListener('load', function() {
+  console.log('[Bookings] window.load fired');
+
+  /* Wire search */
+  var si = document.getElementById('bk-search');
+  if (si) {
+    var st;
+    si.addEventListener('input', function() {
+      clearTimeout(st);
+      var q = this.value.toLowerCase().trim();
+      st = setTimeout(function() {
+        if (!q) { renderTable(allBookings); return; }
+        renderTable(allBookings.filter(function(b) {
+          return (b.booking_id||'').toLowerCase().includes(q)
+              || (b.customer_name||'').toLowerCase().includes(q)
+              || (b.mobile||'').includes(q)
+              || (b.tour_name||'').toLowerCase().includes(q);
+        }));
+      }, 300);
+    });
+  }
+
+  loadBookings(1);
+});
+
+async function loadBookings(page) {
+  page = page || 1;
+  console.log('[Bookings] loadBookings page=' + page);
+
+  var tbody = document.getElementById('bookings-tbody');
+  tbody.innerHTML = '<tr><td colspan="11"><div class="loading"><div class="spinner"></div> Loading...</div></td></tr>';
+  ['total-bookings','total-revenue','total-advance','total-balance'].forEach(function(id){
+    var el = document.getElementById(id); if(el) el.textContent='...';
+  });
+
+  var token = localStorage.getItem('crm_token');
+  if (!token) { window.location.href = '/login'; return; }
+
+  try {
+    var url = BK_API + '/api/bookings?page=' + page + '&per_page=25';
+    console.log('[Bookings] GET ' + url);
+    var res = await fetch(url, {
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }
+    });
+    console.log('[Bookings] status=' + res.status);
+
+    if (res.status === 401) {
+      tbody.innerHTML = noDataRow('Session expired. <a href="/login" style="color:var(--accent)">Log in again</a>.');
+      resetStats(); return;
+    }
+
+    var data = await res.json();
+    console.log('[Bookings] total=' + data.total);
+
+    allBookings  = data.bookings || [];
+    currentPage  = page;
+
+    var cEl = document.getElementById('bk-count');
+    if (cEl) cEl.textContent = (data.total||0) + ' bookings';
+
+    var rev = allBookings.reduce(function(s,b){return s+parseFloat(b.final_amount||0);},0);
+    var adv = allBookings.reduce(function(s,b){return s+parseFloat(b.advance_paid||0);},0);
+    var bal = allBookings.reduce(function(s,b){return s+parseFloat(b.balance||0);},0);
+    setText('total-bookings', data.total||0);
+    setText('total-revenue',  fc(rev));
+    setText('total-advance',  fc(adv));
+    setText('total-balance',  fc(bal));
+
+    renderTable(allBookings);
+
+    /* pagination */
+    var tp  = Math.ceil((data.total||0)/25);
+    var pg  = document.getElementById('bk-pagination');
+    var out = '';
+    if (page > 1) out += btn('<i class="fas fa-chevron-left"></i>', page-1);
+    for (var p = Math.max(1,page-2); p <= Math.min(tp,page+2); p++)
+      out += btn(p, p, p===page);
+    if (page < tp) out += btn('<i class="fas fa-chevron-right"></i>', page+1);
+    if (tp > 1) out += '<span class="page-info" style="margin-left:auto">Page '+page+' of '+tp+'</span>';
+    if (pg) pg.innerHTML = out;
+
+  } catch(e) {
+    console.error('[Bookings] ERROR:', e);
+    tbody.innerHTML = noDataRow('Connection error: ' + e.message +
+      '<br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="loadBookings(1)">Retry</button>');
+    resetStats();
+  }
+}
+
+function renderTable(bookings) {
+  var tbody = document.getElementById('bookings-tbody');
+  if (!bookings || !bookings.length) {
+    tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state"><i class="fas fa-ticket"></i><h3>No bookings yet</h3><p>Convert a lead to booking to see it here</p></div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = bookings.map(function(b) {
+    var bal = parseFloat(b.balance||0);
+    var payCell = bal > 0
+      ? '<button class="btn btn-sm btn-success" onclick="openPayment('+b.id+','+bal+',\''+eq(b.booking_id)+'\',\''+eq(b.customer_name)+'\')"><i class="fas fa-plus"></i> Pay</button>'
+      : '<span class="badge badge-booked" style="font-size:10px">Paid</span>';
+    return '<tr>'
+      + '<td><code style="color:var(--green);font-size:11px;font-weight:600">'+(b.booking_id||'—')+'</code></td>'
+      + '<td><a href="/leads/'+b.lead_id+'" style="font-weight:600;color:var(--accent)">'+(b.customer_name||'—')+'</a>'
+      +    '<div style="font-size:11px;color:var(--text3)">'+(b.mobile||'')+'</div></td>'
+      + '<td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px">'+(b.tour_name||'—')+'</td>'
+      + '<td style="font-size:12px;color:var(--text2)">'+(b.travel_date?fd(b.travel_date):'—')+'</td>'
+      + '<td style="font-weight:600">'+fc(b.final_amount)+'</td>'
+      + '<td style="color:var(--green)">'+fc(b.advance_paid)+'</td>'
+      + '<td style="color:'+(bal>0?'var(--red)':'var(--green)')+';font-weight:600">'+fc(bal)+'</td>'
+      + '<td style="font-size:12px">'+(b.payment_method||'—')+'</td>'
+      + '<td style="font-size:12px">'+(b.staff_name||'—')+'</td>'
+      + '<td style="font-size:12px;color:var(--text3)">'+(b.created_at?fd(b.created_at):'—')+'</td>'
+      + '<td><div style="display:flex;gap:4px">'
+      +   '<a href="/leads/'+b.lead_id+'" class="btn btn-icon btn-sm"><i class="fas fa-eye"></i></a>'
+      +   payCell+'</div></td>'
+      + '</tr>';
+  }).join('');
+}
+
+function openPayment(id, bal, code, name) {
+  currentPaymentBookingId = id;
+  var el = document.getElementById('payment-booking-info');
+  if (el) el.innerHTML = '<strong>'+name+'</strong> · <code>'+code+'</code>'
+    + '<div style="color:var(--red);margin-top:4px">Balance: <strong>'+fc(bal)+'</strong></div>';
+  var a = document.getElementById('pay-amount');   if(a) a.value = bal;
+  var d = document.getElementById('pay-date');     if(d) d.value = new Date().toISOString().split('T')[0];
+  var m = document.getElementById('payment-modal');if(m) m.classList.add('show');
+}
+
+function closePaymentModal() {
+  var m = document.getElementById('payment-modal'); if(m) m.classList.remove('show');
+}
+
+async function submitPayment() {
+  var token = localStorage.getItem('crm_token');
+  var payload = {
+    amount:         parseInt(document.getElementById('pay-amount').value)||0,
+    payment_method: document.getElementById('pay-method').value,
+    payment_date:   document.getElementById('pay-date').value,
+    notes:          document.getElementById('pay-notes').value
+  };
+  try {
+    await fetch(BK_API+'/api/bookings/'+currentPaymentBookingId+'/payment', {
+      method:'POST',
+      headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    closePaymentModal();
+    if(typeof toast==='function') toast('Payment recorded!','success');
+    loadBookings(currentPage);
+  } catch(e) {
+    if(typeof toast==='function') toast('Error: '+e.message,'error');
+  }
+}
+
+/* ── tiny utils ── */
+function fc(n)  { return '₹' + Number(n||0).toLocaleString('en-IN'); }
+function fd(d)  { try{return new Date(d).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});}catch(e){return d;} }
+function eq(s)  { return (s||'').toString().replace(/'/g,"\\'"); }
+function setText(id,v){ var e=document.getElementById(id); if(e) e.textContent=v; }
+function resetStats(){ ['total-bookings','total-revenue','total-advance','total-balance'].forEach(function(id){setText(id,'—');}); }
+function noDataRow(msg){ return '<tr><td colspan="11"><div class="empty-state"><i class="fas fa-exclamation-circle" style="color:var(--red);font-size:32px;display:block;margin-bottom:12px"></i><h3>Error</h3><p>'+msg+'</p></div></td></tr>'; }
+function btn(label, page, active) { return '<button class="page-btn'+(active?' active':'')+'" onclick="loadBookings('+page+')">'+label+'</button>'; }
+</script>
+{% endblock %}

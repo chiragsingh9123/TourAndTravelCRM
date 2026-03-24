@@ -1,0 +1,813 @@
+{% extends "base.html" %}
+{% block title %}Lead Detail — Travel CRM{% endblock %}
+
+{% block content %}
+<div class="page-header" id="lead-header">
+  <div>
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:4px">
+      <a href="/leads" style="color:var(--text3); font-size:12px"><i class="fas fa-arrow-left"></i> All Leads</a>
+    </div>
+    <h1 id="lead-title">Loading...</h1>
+    <div style="display:flex; align-items:center; gap:10px; margin-top:6px" id="lead-meta"></div>
+  </div>
+  <div class="page-header-actions" id="lead-actions"></div>
+</div>
+
+<div style="display:grid; grid-template-columns:1fr 360px; gap:20px" id="lead-layout">
+  <!-- Left Column -->
+  <div>
+    <!-- Tabs -->
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('timeline')"><i class="fas fa-comments"></i> Timeline</div>
+      <div class="tab" onclick="switchTab('package')"><i class="fas fa-suitcase"></i> Package</div>
+      <div class="tab" onclick="switchTab('booking')"><i class="fas fa-ticket"></i> Booking</div>
+      <div class="tab" onclick="switchTab('history')"><i class="fas fa-history"></i> History</div>
+    </div>
+
+    <!-- Timeline Tab -->
+    <div id="tab-timeline">
+      <!-- Add Conversation -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title"><i class="fas fa-plus"></i> Add Conversation</div>
+        <div class="form-grid" style="grid-template-columns:1fr 1fr">
+          <div class="form-group">
+            <label>Call Type</label>
+            <select class="form-control" id="call_type">
+              <option>Outgoing</option>
+              <option>Incoming</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Call Result *</label>
+            <select class="form-control" id="call_result">
+              <option value="">Select result...</option>
+              <option>Not Connected</option>
+              <option>Call Not Picked</option>
+              <option>Customer Busy</option>
+              <option>Interested</option>
+              <option>Call Later</option>
+              <option>Not Interested</option>
+              <option>Package Sent</option>
+              <option>Booking Confirmed</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div class="form-group" style="grid-column:span 2">
+            <label>Conversation Summary</label>
+            <textarea class="form-control" id="conv_summary" rows="3" placeholder="What was discussed? Any customer feedback, requirements, objections..."></textarea>
+          </div>
+          <div class="form-group">
+            <label>Update Lead Status</label>
+            <select class="form-control" id="status_update">
+              <option value="">— No change —</option>
+              <option>New Lead</option>
+              <option>Follow-up</option>
+              <option>Negotiation</option>
+              <option>Booked</option>
+              <option>Lost</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Next Follow-up Date</label>
+            <input type="date" class="form-control" id="next_followup_date">
+          </div>
+        </div>
+        <button class="btn btn-primary" style="margin-top:12px" onclick="addConversation()">
+          <i class="fas fa-paper-plane"></i> Save Conversation
+        </button>
+      </div>
+
+      <!-- Timeline -->
+      <div id="timeline-list">
+        <div class="loading"><div class="spinner"></div> Loading timeline...</div>
+      </div>
+    </div>
+
+    <!-- Package Tab -->
+    <div id="tab-package" style="display:none">
+      <div class="card" style="margin-bottom:16px">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
+          <div class="card-title" style="margin-bottom:0"><i class="fas fa-suitcase"></i> Package Builder</div>
+          <button class="btn btn-primary btn-sm" onclick="initPackage()"><i class="fas fa-plus"></i> New Package</button>
+        </div>
+        <div id="existing-packages"></div>
+      </div>
+
+      <!-- Package Form -->
+      <div class="card" id="package-form" style="display:none">
+        <div class="form-section-title"><i class="fas fa-edit"></i> Package Details</div>
+        <div class="form-group" style="margin-bottom:16px">
+          <label>Package Name</label>
+          <input type="text" class="form-control" id="pkg_name" placeholder="e.g., Ayodhya Prayagraj Kashi 5N6D">
+        </div>
+
+        <!-- Itinerary -->
+        <div style="margin-bottom:16px">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
+            <div class="form-section-title" style="margin-bottom:0"><i class="fas fa-calendar"></i> Itinerary</div>
+            <button class="btn btn-secondary btn-sm" onclick="addItineraryDay()"><i class="fas fa-plus"></i> Add Day</button>
+          </div>
+          <div id="itinerary-days"></div>
+        </div>
+
+        <!-- Hotels -->
+        <div style="margin-bottom:16px">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
+            <div class="form-section-title" style="margin-bottom:0"><i class="fas fa-hotel"></i> Hotels</div>
+            <button class="btn btn-secondary btn-sm" onclick="addHotel()"><i class="fas fa-plus"></i> Add Hotel</button>
+          </div>
+          <div id="hotel-list"></div>
+        </div>
+
+        <!-- Transport -->
+        <div class="card" style="margin-bottom:16px; background:var(--surface2)">
+          <div class="form-section-title"><i class="fas fa-car"></i> Transport</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Vehicle Type</label>
+              <select class="form-control" id="pkg_vehicle">
+                <option>Sedan</option><option>SUV</option><option>Innova</option>
+                <option>Tempo Traveller</option><option>Mini Bus</option><option>Bus</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Transport Cost (₹)</label>
+              <input type="number" class="form-control" id="pkg_transport_cost" placeholder="0" oninput="recalcTotal()">
+            </div>
+          </div>
+        </div>
+
+        <!-- Other Charges -->
+        <div style="margin-bottom:16px">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
+            <div class="form-section-title" style="margin-bottom:0"><i class="fas fa-receipt"></i> Other Charges</div>
+            <button class="btn btn-secondary btn-sm" onclick="addCharge()"><i class="fas fa-plus"></i> Add</button>
+          </div>
+          <div id="charges-list"></div>
+        </div>
+
+        <!-- Pricing -->
+        <div class="card" style="background:rgba(249,115,22,.05); border-color:rgba(249,115,22,.2)">
+          <div class="form-section-title" style="color:var(--accent)"><i class="fas fa-calculator"></i> Price Summary</div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px">
+            <div class="form-group">
+              <label>Hotel Total (₹)</label>
+              <input type="number" class="form-control" id="pkg_hotel_total" readonly style="background:var(--surface)">
+            </div>
+            <div class="form-group">
+              <label>Base Price (₹)</label>
+              <input type="number" class="form-control" id="pkg_base" readonly style="background:var(--surface)">
+            </div>
+            <div class="form-group">
+              <label>Discount (₹)</label>
+              <input type="number" class="form-control" id="pkg_discount" value="0" oninput="recalcTotal()">
+            </div>
+            <div class="form-group">
+              <label>Final Price (₹)</label>
+              <input type="number" class="form-control" id="pkg_final" style="font-size:16px; font-weight:700; color:var(--green)">
+            </div>
+          </div>
+          <textarea class="form-control" id="pkg_notes" rows="2" placeholder="Package notes, inclusions, exclusions..." style="margin-top:12px"></textarea>
+        </div>
+
+        <div style="display:flex; gap:8px; margin-top:16px">
+          <button class="btn btn-primary" onclick="savePackage()"><i class="fas fa-save"></i> Save Package</button>
+          <button class="btn btn-secondary" onclick="document.getElementById('package-form').style.display='none'">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Booking Tab -->
+    <div id="tab-booking" style="display:none">
+      <div id="existing-booking"></div>
+      <div class="card" id="booking-form">
+        <div class="card-title"><i class="fas fa-ticket"></i> Convert to Booking</div>
+        <div id="booking-warning" class="alert alert-info" style="display:none">
+          <i class="fas fa-info-circle"></i> This lead already has a booking. Creating another will add a new booking record.
+        </div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Total Amount (₹)</label>
+            <input type="number" class="form-control" id="bk_total" oninput="calcBalance()">
+          </div>
+          <div class="form-group">
+            <label>Discount (₹)</label>
+            <input type="number" class="form-control" id="bk_discount" value="0" oninput="calcBalance()">
+          </div>
+          <div class="form-group">
+            <label>Final Amount (₹)</label>
+            <input type="number" class="form-control" id="bk_final" style="font-weight:700; color:var(--green)">
+          </div>
+          <div class="form-group">
+            <label>Advance Received (₹)</label>
+            <input type="number" class="form-control" id="bk_advance" value="0" oninput="calcBalance()">
+          </div>
+          <div class="form-group">
+            <label>Balance (₹)</label>
+            <input type="number" class="form-control" id="bk_balance" readonly style="color:var(--red)">
+          </div>
+          <div class="form-group">
+            <label>Payment Method</label>
+            <select class="form-control" id="bk_payment_method">
+              <option>Cash</option><option>UPI</option><option>Bank Transfer</option>
+              <option>Cheque</option><option>Card</option><option>Other</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Payment Date</label>
+            <input type="date" class="form-control" id="bk_payment_date">
+          </div>
+        </div>
+        <textarea class="form-control" id="bk_notes" rows="2" placeholder="Booking notes..." style="margin-top:12px"></textarea>
+        <button class="btn btn-success" style="margin-top:16px" onclick="createBooking()">
+          <i class="fas fa-check-circle"></i> Confirm Booking
+        </button>
+      </div>
+    </div>
+
+    <!-- History Tab -->
+    <div id="tab-history" style="display:none">
+      <div class="card">
+        <div class="card-title"><i class="fas fa-history"></i> Previous Interactions (Same Mobile)</div>
+        <div id="history-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Column -->
+  <div>
+    <!-- Customer Card -->
+    <div class="card" style="margin-bottom:16px" id="customer-card">
+      <div style="text-align:center; margin-bottom:16px">
+        <div style="width:60px; height:60px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; font-size:24px; font-weight:700; margin:0 auto 10px">?</div>
+        <div style="font-size:18px; font-weight:700" id="detail-name">—</div>
+        <div style="color:var(--text3); font-size:12px" id="detail-city"></div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:8px; font-size:13px">
+        <div style="display:flex; align-items:center; gap:8px">
+          <i class="fas fa-phone" style="color:var(--accent); width:16px"></i>
+          <span id="detail-mobile">—</span>
+        </div>
+        <div id="detail-alt-mobile-row" style="display:flex; align-items:center; gap:8px">
+          <i class="fas fa-phone-flip" style="color:var(--text3); width:16px"></i>
+          <span id="detail-alt-mobile"></span>
+        </div>
+        <div id="detail-email-row" style="display:flex; align-items:center; gap:8px">
+          <i class="fas fa-envelope" style="color:var(--text3); width:16px"></i>
+          <span id="detail-email"></span>
+        </div>
+        <hr style="border-color:var(--border); margin:4px 0">
+        <div style="display:flex; align-items:center; gap:8px">
+          <i class="fas fa-map-pin" style="color:var(--blue); width:16px"></i>
+          <span id="detail-tour"></span>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px">
+          <i class="fas fa-calendar" style="color:var(--text3); width:16px"></i>
+          <span id="detail-travel-date"></span>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px">
+          <i class="fas fa-car" style="color:var(--text3); width:16px"></i>
+          <span id="detail-vehicle"></span>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px">
+          <i class="fas fa-hotel" style="color:var(--text3); width:16px"></i>
+          <span id="detail-hotel"></span>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px">
+          <i class="fas fa-people-group" style="color:var(--text3); width:16px"></i>
+          <span id="detail-pax"></span>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px">
+          <i class="fas fa-tag" style="color:var(--text3); width:16px"></i>
+          <span id="detail-source"></span>
+        </div>
+        <hr style="border-color:var(--border); margin:4px 0">
+        <div style="display:flex; align-items:center; gap:8px">
+          <i class="fas fa-user-tie" style="color:var(--accent); width:16px"></i>
+          <span id="detail-assigned"></span>
+        </div>
+      </div>
+      <div style="margin-top:16px">
+        <button class="btn btn-secondary btn-sm" style="width:100%" onclick="openEditModal()">
+          <i class="fas fa-edit"></i> Edit Lead Info
+        </button>
+      </div>
+    </div>
+
+    <!-- Next Follow-up -->
+    <div class="card" style="margin-bottom:16px" id="upcoming-followups-card">
+      <div class="card-title"><i class="fas fa-calendar-check"></i> Upcoming Follow-ups</div>
+      <div id="upcoming-followups"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Lead Modal -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Edit Lead Information</div>
+      <button class="modal-close" onclick="closeModal('edit-modal')">&times;</button>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Customer Name</label>
+        <input type="text" class="form-control" id="edit-name">
+      </div>
+      <div class="form-group">
+        <label>Mobile</label>
+        <input type="tel" class="form-control" id="edit-mobile">
+      </div>
+      <div class="form-group">
+        <label>Alt Mobile</label>
+        <input type="tel" class="form-control" id="edit-alt-mobile">
+      </div>
+      <div class="form-group">
+        <label>City</label>
+        <input type="text" class="form-control" id="edit-city">
+      </div>
+      <div class="form-group" style="grid-column:span 2">
+        <label>Tour Name</label>
+        <input type="text" class="form-control" id="edit-tour">
+      </div>
+      <div class="form-group">
+        <label>Travel Date</label>
+        <input type="date" class="form-control" id="edit-travel-date">
+      </div>
+      <div class="form-group">
+        <label>Status</label>
+        <select class="form-control" id="edit-status">
+          <option>New Lead</option><option>Follow-up</option>
+          <option>Negotiation</option><option>Booked</option><option>Lost</option>
+        </select>
+      </div>
+      <div class="form-group" id="edit-assign-row" style="display:none">
+        <label>Assign To</label>
+        <select class="form-control" id="edit-assigned"></select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('edit-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEdit()">Save Changes</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const LEAD_ID = {{ lead_id }};
+let leadData = null;
+let itineraryDays = [];
+let hotels = [];
+let otherCharges = [];
+let currentPkgId = null;
+
+const RESULT_COLORS = {
+  'Not Connected': 'red', 'Call Not Picked': 'red', 'Customer Busy': 'yellow',
+  'Interested': 'green', 'Call Later': 'yellow', 'Not Interested': 'red',
+  'Package Sent': 'blue', 'Booking Confirmed': 'green', 'Other': 'purple'
+};
+const RESULT_ICONS = {
+  'Not Connected': 'fa-phone-slash', 'Call Not Picked': 'fa-phone-volume',
+  'Customer Busy': 'fa-phone-flip', 'Interested': 'fa-thumbs-up',
+  'Call Later': 'fa-clock', 'Not Interested': 'fa-thumbs-down',
+  'Package Sent': 'fa-paper-plane', 'Booking Confirmed': 'fa-check-circle', 'Other': 'fa-comment'
+};
+
+async function loadLead() {
+  leadData = await apiFetch(`/api/leads/${LEAD_ID}`);
+  if (!leadData) return;
+  
+  renderHeader();
+  renderCustomerCard();
+  renderTimeline();
+  renderPackages();
+  renderBooking();
+  renderHistory();
+  renderFollowups();
+}
+
+function renderHeader() {
+  document.getElementById('lead-title').textContent = leadData.customer_name;
+  document.getElementById('lead-meta').innerHTML = `
+    <code style="background:rgba(249,115,22,.1); color:var(--accent); padding:4px 8px; border-radius:6px; font-size:12px">${leadData.lead_id}</code>
+    ${statusBadge(leadData.status)}
+    <span style="color:var(--text3); font-size:12px">Enquiry: ${formatDate(leadData.enquiry_date||leadData.created_at)}</span>
+  `;
+  document.getElementById('lead-actions').innerHTML = `
+    <a href="/leads/new" class="btn btn-secondary btn-sm"><i class="fas fa-copy"></i> Duplicate</a>
+    <button class="btn btn-primary btn-sm" onclick="switchTab('booking')"><i class="fas fa-ticket"></i> Book Now</button>
+  `;
+}
+
+function renderCustomerCard() {
+  const l = leadData;
+  document.querySelector('#customer-card .user-avatar-large, #customer-card div[style*="60px"]').textContent = l.customer_name.charAt(0).toUpperCase();
+  document.getElementById('detail-name').textContent = l.customer_name;
+  document.getElementById('detail-city').textContent = l.city || '';
+  document.getElementById('detail-mobile').textContent = l.mobile;
+  document.getElementById('detail-alt-mobile').textContent = l.alt_mobile || '';
+  document.getElementById('detail-alt-mobile-row').style.display = l.alt_mobile ? '' : 'none';
+  document.getElementById('detail-email').textContent = l.email || '';
+  document.getElementById('detail-email-row').style.display = l.email ? '' : 'none';
+  document.getElementById('detail-tour').textContent = l.tour_name || '—';
+  document.getElementById('detail-travel-date').textContent = formatDate(l.travel_date) || '—';
+  document.getElementById('detail-vehicle').textContent = `${l.vehicle_type} · ${l.hotel_category}`;
+  document.getElementById('detail-hotel').textContent = `${l.meal_plan} Meal Plan`;
+  document.getElementById('detail-pax').textContent = `${l.adults} Adults, ${l.children} Children`;
+  document.getElementById('detail-source').textContent = `Source: ${l.lead_source}`;
+  document.getElementById('detail-assigned').textContent = `Assigned: ${l.assigned_name||'Unassigned'}`;
+  
+  // Update avatar initials
+  document.querySelector('#customer-card div[style*="24px"]').textContent = l.customer_name.charAt(0).toUpperCase();
+}
+
+function renderTimeline() {
+  const el = document.getElementById('timeline-list');
+  if (!leadData.conversations || !leadData.conversations.length) {
+    el.innerHTML = '<div class="empty-state"><i class="fas fa-comments"></i><h3>No conversations yet</h3><p>Add the first conversation update above</p></div>';
+    return;
+  }
+  el.innerHTML = `<div class="timeline">` + leadData.conversations.map(c => {
+    const color = RESULT_COLORS[c.call_result] || 'purple';
+    const icon = RESULT_ICONS[c.call_result] || 'fa-comment';
+    return `
+      <div class="timeline-item">
+        <div class="timeline-dot ${color}"><i class="fas ${icon}" style="font-size:10px"></i></div>
+        <div class="timeline-content">
+          <div class="timeline-meta">
+            <span class="timeline-date">${formatDate(c.created_at)}</span>
+            <span class="timeline-staff">${c.staff_name}</span>
+            <span class="badge badge-${color==='red'?'lost':color==='green'?'booked':color==='yellow'?'followup':'new'}" style="font-size:10px; margin-left:auto">${c.call_result}</span>
+          </div>
+          ${c.summary ? `<div style="color:var(--text); font-size:13px; margin-top:4px">${c.summary}</div>` : ''}
+          ${c.next_followup_date ? `<div style="color:var(--text3); font-size:11px; margin-top:6px"><i class="fas fa-calendar-check" style="color:var(--yellow)"></i> Next follow-up: ${formatDate(c.next_followup_date)}</div>` : ''}
+          <div style="color:var(--text3); font-size:10px; margin-top:4px">${c.call_type} · ${timeAgo(c.created_at)}</div>
+        </div>
+      </div>`;
+  }).join('') + `</div>`;
+}
+
+function renderPackages() {
+  const el = document.getElementById('existing-packages');
+  if (!leadData.packages || !leadData.packages.length) {
+    el.innerHTML = '<div style="color:var(--text3); font-size:13px; text-align:center; padding:20px">No packages created yet</div>';
+    return;
+  }
+  el.innerHTML = leadData.packages.map(p => `
+    <div style="border:1px solid var(--border); border-radius:10px; padding:14px; margin-bottom:10px">
+      <div style="display:flex; justify-content:space-between; align-items:center">
+        <div style="font-weight:600">${p.tour_name}</div>
+        <div style="display:flex; gap:6px">
+          <button class="btn btn-sm btn-secondary" onclick="loadPackageForEdit(${p.id})"><i class="fas fa-edit"></i></button>
+          <button class="btn btn-sm btn-primary" onclick="usePackageForBooking(${p.id})"><i class="fas fa-ticket"></i> Book</button>
+        </div>
+      </div>
+      <div style="display:flex; gap:16px; margin-top:8px; font-size:12px; color:var(--text3)">
+        <span>Base: <strong style="color:var(--text)">${formatCurrency(p.base_price)}</strong></span>
+        <span>Discount: <strong style="color:var(--red)">-${formatCurrency(p.discount)}</strong></span>
+        <span>Final: <strong style="color:var(--green); font-size:14px">${formatCurrency(p.final_price)}</strong></span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderBooking() {
+  document.getElementById('bk_payment_date').value = new Date().toISOString().split('T')[0];
+  const b = leadData.booking;
+  const existing = document.getElementById('existing-booking');
+  if (b) {
+    document.getElementById('booking-warning').style.display = 'flex';
+    existing.innerHTML = `
+      <div class="card" style="margin-bottom:16px; border-color:var(--green)">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px">
+          <i class="fas fa-check-circle" style="color:var(--green); font-size:20px"></i>
+          <div>
+            <div style="font-weight:700; color:var(--green)">BOOKED</div>
+            <code style="color:var(--text3); font-size:11px">${b.booking_id}</code>
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:13px">
+          <div>Total: <strong>${formatCurrency(b.total_amount)}</strong></div>
+          <div>Discount: <strong style="color:var(--red)">-${formatCurrency(b.discount)}</strong></div>
+          <div>Final: <strong style="color:var(--green)">${formatCurrency(b.final_amount)}</strong></div>
+          <div>Advance: <strong>${formatCurrency(b.advance_paid)}</strong></div>
+          <div>Balance: <strong style="color:${b.balance>0?'var(--red)':'var(--green)'}">${formatCurrency(b.balance)}</strong></div>
+          <div>Method: <strong>${b.payment_method}</strong></div>
+        </div>
+      </div>`;
+  }
+}
+
+function renderHistory() {
+  const el = document.getElementById('history-list');
+  if (!leadData.history || !leadData.history.length) {
+    el.innerHTML = '<div class="empty-state"><i class="fas fa-history"></i><h3>No previous records</h3><p>This is the first enquiry for this mobile number</p></div>';
+    return;
+  }
+  el.innerHTML = leadData.history.map(h => `
+    <a href="/leads/${h.id}" style="display:block; padding:12px; border-bottom:1px solid var(--border); text-decoration:none; color:var(--text)">
+      <div style="display:flex; justify-content:space-between; align-items:center">
+        <div>
+          <code style="color:var(--accent); font-size:11px">${h.lead_id}</code>
+          <div style="font-size:13px; margin-top:2px">${h.tour_name||'No tour specified'}</div>
+        </div>
+        <div style="text-align:right">
+          ${statusBadge(h.status)}
+          <div style="font-size:11px; color:var(--text3); margin-top:4px">${formatDate(h.created_at)}</div>
+        </div>
+      </div>
+    </a>
+  `).join('');
+}
+
+function renderFollowups() {
+  const el = document.getElementById('upcoming-followups');
+  const pending = (leadData.followups || []).filter(f => f.status === 'Pending');
+  if (!pending.length) {
+    el.innerHTML = '<div style="color:var(--text3); font-size:12px; text-align:center; padding:12px">No upcoming follow-ups</div>';
+    return;
+  }
+  el.innerHTML = pending.map(f => `
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border)">
+      <div>
+        <div style="font-size:12px; font-weight:600">${formatDate(f.followup_date)}</div>
+        <div style="font-size:11px; color:var(--text3)">${f.notes||''}</div>
+      </div>
+      <button class="btn btn-sm btn-success" onclick="completeFollowup(${f.id})">
+        <i class="fas fa-check"></i>
+      </button>
+    </div>
+  `).join('');
+}
+
+// ── CONVERSATIONS ──
+async function addConversation() {
+  const result = document.getElementById('call_result').value;
+  if (!result) { toast('Please select a call result', 'error'); return; }
+  
+  const payload = {
+    call_type: document.getElementById('call_type').value,
+    call_result: result,
+    summary: document.getElementById('conv_summary').value.trim(),
+    next_followup_date: document.getElementById('next_followup_date').value || null,
+    status_update: document.getElementById('status_update').value || null
+  };
+  
+  try {
+    await apiFetch(`/api/leads/${LEAD_ID}/conversations`, { method: 'POST', body: JSON.stringify(payload) });
+    toast('Conversation saved!', 'success');
+    document.getElementById('call_result').value = '';
+    document.getElementById('conv_summary').value = '';
+    document.getElementById('next_followup_date').value = '';
+    document.getElementById('status_update').value = '';
+    await loadLead();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ── PACKAGE BUILDER ──
+function initPackage() {
+  currentPkgId = null;
+  itineraryDays = [];
+  hotels = [];
+  otherCharges = [];
+  document.getElementById('pkg_name').value = leadData.tour_name || '';
+  document.getElementById('pkg_vehicle').value = leadData.vehicle_type || 'Sedan';
+  document.getElementById('pkg_transport_cost').value = '';
+  document.getElementById('pkg_discount').value = '0';
+  document.getElementById('pkg_notes').value = '';
+  document.getElementById('itinerary-days').innerHTML = '';
+  document.getElementById('hotel-list').innerHTML = '';
+  document.getElementById('charges-list').innerHTML = '';
+  document.getElementById('package-form').style.display = 'block';
+  recalcTotal();
+}
+
+function addItineraryDay() {
+  const idx = itineraryDays.length;
+  itineraryDays.push({ day: idx + 1, description: '' });
+  const el = document.getElementById('itinerary-days');
+  const div = document.createElement('div');
+  div.style.cssText = 'display:flex; gap:8px; margin-bottom:8px; align-items:flex-start';
+  div.innerHTML = `
+    <div style="padding:6px 10px; background:var(--accent); color:#fff; border-radius:6px; font-size:12px; font-weight:700; white-space:nowrap; margin-top:2px">Day ${idx+1}</div>
+    <input type="text" class="form-control" placeholder="e.g., Arrive Prayagraj, local sightseeing" oninput="itineraryDays[${idx}].description=this.value">
+    <button class="btn btn-danger btn-sm" onclick="this.parentElement.remove(); itineraryDays.splice(${idx},1)"><i class="fas fa-trash"></i></button>
+  `;
+  el.appendChild(div);
+}
+
+function addHotel() {
+  const idx = hotels.length;
+  hotels.push({ city: '', name: '', nights: 1, price: 0 });
+  const el = document.getElementById('hotel-list');
+  const div = document.createElement('div');
+  div.style.cssText = 'display:grid; grid-template-columns:1fr 1fr 60px 100px 36px; gap:6px; margin-bottom:8px; align-items:end';
+  div.innerHTML = `
+    <div class="form-group" style="margin:0">
+      <label style="font-size:10px">City</label>
+      <input type="text" class="form-control" placeholder="City" oninput="hotels[${idx}].city=this.value">
+    </div>
+    <div class="form-group" style="margin:0">
+      <label style="font-size:10px">Hotel Name</label>
+      <input type="text" class="form-control" placeholder="Hotel name" oninput="hotels[${idx}].name=this.value">
+    </div>
+    <div class="form-group" style="margin:0">
+      <label style="font-size:10px">Nights</label>
+      <input type="number" class="form-control" value="1" min="1" oninput="hotels[${idx}].nights=parseInt(this.value)||1; recalcTotal()">
+    </div>
+    <div class="form-group" style="margin:0">
+      <label style="font-size:10px">Price/Night (₹)</label>
+      <input type="number" class="form-control" placeholder="0" oninput="hotels[${idx}].price=parseInt(this.value)||0; recalcTotal()">
+    </div>
+    <button class="btn btn-danger btn-sm" onclick="this.parentElement.remove(); hotels.splice(${idx},1); recalcTotal()"><i class="fas fa-trash"></i></button>
+  `;
+  el.appendChild(div);
+}
+
+function addCharge() {
+  const idx = otherCharges.length;
+  otherCharges.push({ name: '', amount: 0 });
+  const el = document.getElementById('charges-list');
+  const div = document.createElement('div');
+  div.style.cssText = 'display:flex; gap:8px; margin-bottom:8px; align-items:end';
+  div.innerHTML = `
+    <div class="form-group" style="flex:1; margin:0">
+      <input type="text" class="form-control" placeholder="Charge name (e.g., Entry Tickets)" oninput="otherCharges[${idx}].name=this.value">
+    </div>
+    <div class="form-group" style="width:120px; margin:0">
+      <input type="number" class="form-control" placeholder="₹ Amount" oninput="otherCharges[${idx}].amount=parseInt(this.value)||0; recalcTotal()">
+    </div>
+    <button class="btn btn-danger btn-sm" onclick="this.parentElement.remove(); otherCharges.splice(${idx},1); recalcTotal()"><i class="fas fa-trash"></i></button>
+  `;
+  el.appendChild(div);
+}
+
+function recalcTotal() {
+  const hotelTotal = hotels.reduce((s, h) => s + (h.price * h.nights), 0);
+  const transport = parseInt(document.getElementById('pkg_transport_cost')?.value) || 0;
+  const charges = otherCharges.reduce((s, c) => s + c.amount, 0);
+  const base = hotelTotal + transport + charges;
+  const discount = parseInt(document.getElementById('pkg_discount')?.value) || 0;
+  const final = base - discount;
+  document.getElementById('pkg_hotel_total').value = hotelTotal;
+  document.getElementById('pkg_base').value = base;
+  document.getElementById('pkg_final').value = final;
+}
+
+async function savePackage() {
+  const payload = {
+    tour_name: document.getElementById('pkg_name').value,
+    itinerary: itineraryDays,
+    hotels: hotels,
+    transport: { type: document.getElementById('pkg_vehicle').value, price: parseInt(document.getElementById('pkg_transport_cost').value)||0 },
+    other_charges: otherCharges,
+    base_price: parseInt(document.getElementById('pkg_base').value)||0,
+    discount: parseInt(document.getElementById('pkg_discount').value)||0,
+    final_price: parseInt(document.getElementById('pkg_final').value)||0,
+    notes: document.getElementById('pkg_notes').value
+  };
+  
+  const url = currentPkgId ? `/api/packages/${currentPkgId}` : `/api/leads/${LEAD_ID}/packages`;
+  const method = currentPkgId ? 'PUT' : 'POST';
+  await apiFetch(url, { method, body: JSON.stringify(payload) });
+  document.getElementById('package-form').style.display = 'none';
+  toast('Package saved!', 'success');
+  await loadLead();
+}
+
+async function loadPackageForEdit(pkgId) {
+  const p = await apiFetch(`/api/packages/${pkgId}`);
+  if (!p) return;
+  currentPkgId = pkgId;
+  document.getElementById('pkg_name').value = p.tour_name || '';
+  itineraryDays = p.itinerary || [];
+  hotels = p.hotels || [];
+  otherCharges = p.other_charges || [];
+  document.getElementById('pkg_transport_cost').value = p.transport?.price || 0;
+  document.getElementById('pkg_vehicle').value = p.transport?.type || 'Sedan';
+  document.getElementById('pkg_discount').value = p.discount || 0;
+  document.getElementById('pkg_notes').value = p.notes || '';
+  
+  // Re-render form fields
+  document.getElementById('itinerary-days').innerHTML = '';
+  itineraryDays.forEach((d, i) => { addItineraryDay(); });
+  document.getElementById('hotel-list').innerHTML = '';
+  hotels.forEach((h, i) => { addHotel(); });
+  
+  document.getElementById('package-form').style.display = 'block';
+  recalcTotal();
+  switchTab('package');
+}
+
+function usePackageForBooking(pkgId) {
+  const pkg = leadData.packages.find(p => p.id === pkgId);
+  if (!pkg) return;
+  switchTab('booking');
+  document.getElementById('bk_total').value = pkg.final_price;
+  document.getElementById('bk_discount').value = 0;
+  document.getElementById('bk_final').value = pkg.final_price;
+  calcBalance();
+}
+
+// ── BOOKING ──
+function calcBalance() {
+  const total = parseInt(document.getElementById('bk_total').value)||0;
+  const discount = parseInt(document.getElementById('bk_discount').value)||0;
+  const final = total - discount;
+  const advance = parseInt(document.getElementById('bk_advance').value)||0;
+  document.getElementById('bk_final').value = final;
+  document.getElementById('bk_balance').value = final - advance;
+}
+
+async function createBooking() {
+  const total = parseInt(document.getElementById('bk_total').value)||0;
+  if (!total) { toast('Please enter total amount', 'error'); return; }
+  
+  const payload = {
+    total_amount: total,
+    discount: parseInt(document.getElementById('bk_discount').value)||0,
+    final_amount: parseInt(document.getElementById('bk_final').value)||0,
+    advance_paid: parseInt(document.getElementById('bk_advance').value)||0,
+    balance: parseInt(document.getElementById('bk_balance').value)||0,
+    payment_method: document.getElementById('bk_payment_method').value,
+    payment_date: document.getElementById('bk_payment_date').value,
+    notes: document.getElementById('bk_notes').value
+  };
+  
+  try {
+    const res = await apiFetch(`/api/leads/${LEAD_ID}/book`, { method: 'POST', body: JSON.stringify(payload) });
+    toast(`Booking ${res.booking_id} confirmed!`, 'success');
+    await loadLead();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ── EDIT MODAL ──
+function openEditModal() {
+  const l = leadData;
+  document.getElementById('edit-name').value = l.customer_name;
+  document.getElementById('edit-mobile').value = l.mobile;
+  document.getElementById('edit-alt-mobile').value = l.alt_mobile || '';
+  document.getElementById('edit-city').value = l.city || '';
+  document.getElementById('edit-tour').value = l.tour_name || '';
+  document.getElementById('edit-travel-date').value = l.travel_date || '';
+  document.getElementById('edit-status').value = l.status;
+  
+  const user = getUser();
+  if (user && (user.role === 'admin' || user.role === 'manager')) {
+    document.getElementById('edit-assign-row').style.display = 'block';
+    loadStaffForEdit();
+  }
+  document.getElementById('edit-modal').classList.add('show');
+}
+
+async function loadStaffForEdit() {
+  const users = await apiFetch('/api/users');
+  if (!users) return;
+  const sel = document.getElementById('edit-assigned');
+  sel.innerHTML = '';
+  users.filter(u => u.role === 'staff' && u.is_active).forEach(u => {
+    sel.innerHTML += `<option value="${u.id}" ${u.id===leadData.assigned_to?'selected':''}>${u.full_name}</option>`;
+  });
+}
+
+async function saveEdit() {
+  const payload = {
+    customer_name: document.getElementById('edit-name').value,
+    mobile: document.getElementById('edit-mobile').value,
+    alt_mobile: document.getElementById('edit-alt-mobile').value,
+    city: document.getElementById('edit-city').value,
+    tour_name: document.getElementById('edit-tour').value,
+    travel_date: document.getElementById('edit-travel-date').value || null,
+    status: document.getElementById('edit-status').value
+  };
+  const assigned = document.getElementById('edit-assigned').value;
+  if (assigned) payload.assigned_to = parseInt(assigned);
+  
+  await apiFetch(`/api/leads/${LEAD_ID}`, { method: 'PUT', body: JSON.stringify(payload) });
+  closeModal('edit-modal');
+  toast('Lead updated!', 'success');
+  await loadLead();
+}
+
+async function completeFollowup(id) {
+  await apiFetch(`/api/followups/${id}/complete`, { method: 'POST' });
+  toast('Follow-up completed', 'success');
+  await loadLead();
+}
+
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('[id^="tab-"]').forEach(t => t.style.display = 'none');
+  document.getElementById(`tab-${name}`).style.display = 'block';
+  document.querySelectorAll('.tab').forEach(t => {
+    if (t.textContent.toLowerCase().includes(name.substring(0,4))) t.classList.add('active');
+  });
+}
+
+loadLead();
+</script>
+{% endblock %}

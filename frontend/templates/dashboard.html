@@ -1,0 +1,332 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Travel CRM{% endblock %}
+{% block nav_dashboard %}active{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Dashboard</h1>
+    <div class="sub" id="dash-greeting">Good morning!</div>
+  </div>
+  <div class="page-header-actions">
+    <span id="today-date" style="color:var(--text3); font-size:13px;"></span>
+  </div>
+</div>
+
+<!-- Admin Dashboard -->
+<div id="admin-dash">
+  <div class="stats-grid" id="stats-grid">
+    <div class="stat-card orange">
+      <div class="stat-label">Total Leads</div>
+      <div class="stat-value" id="s-total-leads">—</div>
+      <i class="fas fa-users stat-icon"></i>
+    </div>
+    <div class="stat-card blue">
+      <div class="stat-label">New Today</div>
+      <div class="stat-value" id="s-new-today">—</div>
+      <i class="fas fa-user-plus stat-icon"></i>
+    </div>
+    <div class="stat-card yellow">
+      <div class="stat-label">Follow-ups Today</div>
+      <div class="stat-value" id="s-followups">—</div>
+      <i class="fas fa-bell stat-icon"></i>
+    </div>
+    <div class="stat-card red">
+      <div class="stat-label">Overdue</div>
+      <div class="stat-value" id="s-overdue">—</div>
+      <i class="fas fa-clock stat-icon"></i>
+    </div>
+    <div class="stat-card green">
+      <div class="stat-label">Bookings Today</div>
+      <div class="stat-value" id="s-book-today">—</div>
+      <i class="fas fa-ticket stat-icon"></i>
+    </div>
+    <div class="stat-card purple">
+      <div class="stat-label">Total Revenue</div>
+      <div class="stat-value" id="s-revenue" style="font-size:18px">—</div>
+      <i class="fas fa-indian-rupee-sign stat-icon"></i>
+    </div>
+  </div>
+
+  <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px; margin-bottom:20px">
+    <!-- Lead Status -->
+    <div class="card">
+      <div class="card-title"><i class="fas fa-chart-pie"></i> Lead Status</div>
+      <div id="lead-status-chart" style="display:flex; flex-direction:column; gap:10px"></div>
+    </div>
+    <!-- Quick Actions -->
+    <div class="card">
+      <div class="card-title"><i class="fas fa-bolt"></i> Quick Actions</div>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px">
+        <a href="/leads/new" class="btn btn-primary" style="justify-content:center">
+          <i class="fas fa-plus"></i> New Enquiry
+        </a>
+        <a href="/followups" class="btn btn-secondary" style="justify-content:center">
+          <i class="fas fa-bell"></i> Follow-ups
+        </a>
+        <a href="/bookings" class="btn btn-secondary" style="justify-content:center">
+          <i class="fas fa-ticket"></i> Bookings
+        </a>
+        <a href="/reports" class="btn btn-secondary" style="justify-content:center">
+          <i class="fas fa-chart-bar"></i> Reports
+        </a>
+      </div>
+      <div style="margin-top:16px" class="admin-only">
+        <div class="card-title" style="margin-bottom:10px"><i class="fas fa-download"></i> Export Data</div>
+        <div style="display:flex; gap:8px">
+          <button class="btn btn-sm btn-secondary" onclick="exportData('leads')">
+            <i class="fas fa-file-csv"></i> Leads CSV
+          </button>
+          <button class="btn btn-sm btn-secondary" onclick="exportData('bookings')">
+            <i class="fas fa-file-csv"></i> Bookings CSV
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Staff Performance (admin only) -->
+  <div class="card admin-only" style="margin-bottom:20px">
+    <div class="card-title"><i class="fas fa-ranking-star"></i> Staff Performance</div>
+    <div class="table-wrap">
+      <table id="perf-table">
+        <thead>
+          <tr>
+            <th>Staff Member</th>
+            <th>Total Leads</th>
+            <th>Calls Made</th>
+            <th>Bookings</th>
+            <th>Converted</th>
+            <th>Revenue</th>
+          </tr>
+        </thead>
+        <tbody id="perf-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Recent Leads -->
+  <div class="card">
+    <div class="card-title"><i class="fas fa-clock-rotate-left"></i> Recent Leads</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Lead ID</th>
+            <th>Customer</th>
+            <th>Mobile</th>
+            <th>Tour</th>
+            <th>Status</th>
+            <th>Assigned To</th>
+            <th>Date</th>
+          </tr>
+        </thead>
+        <tbody id="recent-leads-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Staff Dashboard -->
+<div id="staff-dash" style="display:none">
+  <div class="stats-grid">
+    <div class="stat-card orange">
+      <div class="stat-label">My Leads</div>
+      <div class="stat-value" id="ss-leads">—</div>
+      <i class="fas fa-users stat-icon"></i>
+    </div>
+    <div class="stat-card blue">
+      <div class="stat-label">New Leads</div>
+      <div class="stat-value" id="ss-new">—</div>
+      <i class="fas fa-user-plus stat-icon"></i>
+    </div>
+    <div class="stat-card yellow">
+      <div class="stat-label">Today's Follow-ups</div>
+      <div class="stat-value" id="ss-followups">—</div>
+      <i class="fas fa-bell stat-icon"></i>
+    </div>
+    <div class="stat-card red">
+      <div class="stat-label">Overdue</div>
+      <div class="stat-value" id="ss-overdue">—</div>
+      <i class="fas fa-clock stat-icon"></i>
+    </div>
+    <div class="stat-card green">
+      <div class="stat-label">My Bookings</div>
+      <div class="stat-value" id="ss-bookings">—</div>
+      <i class="fas fa-ticket stat-icon"></i>
+    </div>
+    <div class="stat-card purple">
+      <div class="stat-label">My Revenue</div>
+      <div class="stat-value" id="ss-revenue" style="font-size:18px">—</div>
+      <i class="fas fa-indian-rupee-sign stat-icon"></i>
+    </div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:20px">
+    <a href="/leads/new" class="card" style="cursor:pointer; border-color:var(--accent); text-align:center; padding:30px; text-decoration:none">
+      <i class="fas fa-plus-circle" style="font-size:32px; color:var(--accent); margin-bottom:10px; display:block"></i>
+      <div style="font-weight:600; font-size:15px">Add New Enquiry</div>
+      <div style="color:var(--text3); font-size:12px; margin-top:4px">Create a new customer lead</div>
+    </a>
+    <a href="/followups" class="card" style="cursor:pointer; text-align:center; padding:30px; text-decoration:none">
+      <i class="fas fa-bell" style="font-size:32px; color:var(--yellow); margin-bottom:10px; display:block"></i>
+      <div style="font-weight:600; font-size:15px">My Follow-ups</div>
+      <div style="color:var(--text3); font-size:12px; margin-top:4px">View pending follow-ups</div>
+    </a>
+  </div>
+
+  <!-- Today's followups for staff -->
+  <div class="card">
+    <div class="card-title"><i class="fas fa-calendar-day"></i> Today's Follow-ups</div>
+    <div id="staff-followups-list"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.getElementById('today-date').textContent = new Date().toLocaleDateString('en-IN', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+const h = new Date().getHours();
+document.getElementById('dash-greeting').textContent = h < 12 ? 'Good morning!' : h < 17 ? 'Good afternoon!' : 'Good evening!';
+
+const STATUS_COLORS = {
+  'New Lead': 'blue', 'Follow-up': 'yellow', 'Negotiation': 'purple',
+  'Booked': 'green', 'Lost': 'red'
+};
+
+async function loadDashboard() {
+  const user = getUser();
+  if (!user) return;
+
+  if (user.role === 'admin' || user.role === 'manager') {
+    document.getElementById('admin-dash').style.display = 'block';
+    document.getElementById('staff-dash').style.display = 'none';
+    document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'block');
+    await loadAdminDash();
+  } else {
+    document.getElementById('admin-dash').style.display = 'none';
+    document.getElementById('staff-dash').style.display = 'block';
+    await loadStaffDash();
+  }
+}
+
+async function loadAdminDash() {
+  const data = await apiFetch('/api/dashboard');
+  console.log(data);
+  if (!data) return;
+
+  document.getElementById('s-total-leads').textContent = data.total_leads || 0;
+  document.getElementById('s-new-today').textContent = data.new_leads_today || 0;
+  document.getElementById('s-followups').textContent = data.followups_today || 0;
+  document.getElementById('s-overdue').textContent = data.overdue || 0;
+  document.getElementById('s-book-today').textContent = data.bookings_today || 0;
+  document.getElementById('s-revenue').textContent = formatCurrency(data.total_revenue);
+
+  // Status breakdown
+  const statusEl = document.getElementById('lead-status-chart');
+  const total = data.total_leads || 1;
+  if (data.lead_status_counts) {
+    statusEl.innerHTML = data.lead_status_counts.map(s => {
+      const pct = Math.round((s.cnt / total) * 100);
+      const color = STATUS_COLORS[s.status] || 'blue';
+      return `
+        <div>
+          <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:12px">
+            <span>${statusBadge(s.status)}</span>
+            <span style="color:var(--text3)">${s.cnt} (${pct}%)</span>
+          </div>
+          <div style="background:var(--border); border-radius:4px; height:6px">
+            <div style="background:var(--${color}); height:6px; border-radius:4px; width:${pct}%; transition:width .6s"></div>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  // Performance table
+  if (data.staff_performance) {
+    document.getElementById('perf-tbody').innerHTML = data.staff_performance.map(s => `
+      <tr>
+        <td><strong>${s.full_name}</strong></td>
+        <td>${s.leads}</td>
+        <td>${s.calls}</td>
+        <td>${s.bookings}</td>
+        <td>${s.converted || 0}</td>
+        <td style="color:var(--green); font-weight:600">${formatCurrency(s.revenue)}</td>
+      </tr>
+    `).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text3)">No data</td></tr>';
+  }
+
+  // Recent leads
+  if (data.recent_leads) {
+    document.getElementById('recent-leads-tbody').innerHTML = data.recent_leads.map(l => `
+      <tr style="cursor:pointer" onclick="window.location='/leads/${l.id}'">
+        <td><code style="color:var(--accent); font-size:11px">${l.lead_id}</code></td>
+        <td><strong>${l.customer_name}</strong></td>
+        <td>${l.mobile}</td>
+        <td>${l.tour_name || '—'}</td>
+        <td>${statusBadge(l.status)}</td>
+        <td>${l.assigned_name || '—'}</td>
+        <td style="color:var(--text3)">${formatDate(l.created_at)}</td>
+      </tr>
+    `).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--text3)">No leads yet</td></tr>';
+  }
+}
+
+async function loadStaffDash() {
+  const data = await apiFetch('/api/dashboard');
+  if (!data) return;
+
+  document.getElementById('ss-leads').textContent = data.my_leads || 0;
+  document.getElementById('ss-new').textContent = data.new_leads || 0;
+  document.getElementById('ss-followups').textContent = data.followups_today || 0;
+  document.getElementById('ss-overdue').textContent = data.overdue || 0;
+  document.getElementById('ss-bookings').textContent = data.bookings || 0;
+  document.getElementById('ss-revenue').textContent = formatCurrency(data.revenue);
+
+  // Load today followups for staff
+  const followups = await apiFetch('/api/followups?filter=today');
+  const el = document.getElementById('staff-followups-list');
+  if (!followups || !followups.length) {
+    el.innerHTML = '<div class="empty-state"><i class="fas fa-check-circle"></i><h3>All clear!</h3><p>No follow-ups scheduled for today</p></div>';
+    return;
+  }
+  el.innerHTML = followups.map(f => `
+    <div style="display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--border)">
+      <div style="flex:1">
+        <div style="font-weight:600">${f.customer_name}</div>
+        <div style="font-size:12px; color:var(--text3)">${f.mobile} · ${f.tour_name||'N/A'}</div>
+        <div style="font-size:11px; color:var(--text3); margin-top:2px">${f.notes||''}</div>
+      </div>
+      <div style="display:flex; gap:6px">
+        <a href="/leads/${f.id}" class="btn btn-sm btn-secondary">View</a>
+        <button class="btn btn-sm btn-success" onclick="completeFollowup(${f.id}, this)">
+          <i class="fas fa-check"></i> Done
+        </button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function completeFollowup(id, btn) {
+  btn.disabled = true;
+  await apiFetch(`/api/followups/${id}/complete`, { method: 'POST' });
+  btn.closest('div[style]').remove();
+  toast('Follow-up marked as completed', 'success');
+}
+
+function exportData(type) {
+  const token = getToken();
+  window.open(`${API}/api/export/${type}?token=${token}`, '_blank');
+  fetch(`${API}/api/export/${type}`, {
+    headers: { 'Authorization': 'Bearer ' + token }
+  }).then(r => r.blob()).then(blob => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${type}_export.csv`;
+    a.click();
+  });
+}
+
+loadDashboard();
+</script>
+{% endblock %}

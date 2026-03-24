@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}Follow-ups — Travel CRM{% endblock %}
+{% block nav_followups %}active{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Follow-ups</h1>
+    <div class="sub">Track and manage all follow-up schedules</div>
+  </div>
+</div>
+
+<div style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:24px">
+  <div class="stat-card red" style="cursor:pointer" onclick="loadFollowups('overdue')">
+    <div class="stat-label">Overdue</div>
+    <div class="stat-value" id="count-overdue">—</div>
+    <i class="fas fa-exclamation-triangle stat-icon"></i>
+  </div>
+  <div class="stat-card yellow" style="cursor:pointer" onclick="loadFollowups('today')">
+    <div class="stat-label">Today</div>
+    <div class="stat-value" id="count-today">—</div>
+    <i class="fas fa-calendar-day stat-icon"></i>
+  </div>
+  <div class="stat-card blue" style="cursor:pointer" onclick="loadFollowups('tomorrow')">
+    <div class="stat-label">Tomorrow</div>
+    <div class="stat-value" id="count-tomorrow">—</div>
+    <i class="fas fa-calendar-plus stat-icon"></i>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab" id="tab-overdue" onclick="loadFollowups('overdue')">
+    <i class="fas fa-exclamation-triangle" style="color:var(--red)"></i> Overdue
+  </div>
+  <div class="tab active" id="tab-today" onclick="loadFollowups('today')">
+    <i class="fas fa-calendar-day" style="color:var(--yellow)"></i> Today
+  </div>
+  <div class="tab" id="tab-tomorrow" onclick="loadFollowups('tomorrow')">
+    <i class="fas fa-calendar-plus" style="color:var(--blue)"></i> Tomorrow
+  </div>
+</div>
+
+<div id="followups-list">
+  <div class="loading"><div class="spinner"></div> Loading follow-ups...</div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let currentFilter = 'today';
+
+async function loadCounts() {
+  for (const f of ['overdue','today','tomorrow']) {
+    const data = await apiFetch(`/api/followups?filter=${f}`);
+    document.getElementById(`count-${f}`).textContent = data ? data.length : 0;
+  }
+}
+
+async function loadFollowups(filter = 'today') {
+  currentFilter = filter;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(`tab-${filter}`).classList.add('active');
+  
+  const el = document.getElementById('followups-list');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div> Loading...</div>';
+  
+  const data = await apiFetch(`/api/followups?filter=${filter}`);
+  
+  if (!data || !data.length) {
+    const messages = {
+      overdue: "No overdue follow-ups! You're on top of things.",
+      today: "No follow-ups scheduled for today.",
+      tomorrow: "No follow-ups scheduled for tomorrow."
+    };
+    el.innerHTML = `<div class="empty-state"><i class="fas fa-check-circle" style="color:var(--green)"></i><h3>All clear!</h3><p>${messages[filter]}</p></div>`;
+    return;
+  }
+  
+  el.innerHTML = `
+    <div class="card" style="padding:0; overflow:hidden">
+      <table>
+        <thead>
+          <tr>
+            <th>Customer</th>
+            <th>Mobile</th>
+            <th>Tour Package</th>
+            <th>Lead ID</th>
+            <th>Follow-up Date</th>
+            <th>Staff</th>
+            <th>Notes</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${data.map(f => {
+            console.log('Follow-up:', f);
+            const isOverdue = new Date(f.followup_date) < new Date() && filter !== 'today';
+            return `
+              <tr>
+                <td>
+                  <a href="/leads/${f.LeadId}" style="font-weight:600; color:var(--accent)">${f.customer_name}</a>
+                </td>
+                <td>${f.mobile}</td>
+                <td style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${f.tour_name||'—'}</td>
+                <td><code style="font-size:11px; color:var(--text3)">${f.lead_id}</code></td>
+                <td>
+                  <span style="color:${isOverdue?'var(--red)':filter==='today'?'var(--yellow)':'var(--blue)'}; font-weight:600">
+                    ${formatDate(f.followup_date)}
+                  </span>
+                </td>
+                <td style="font-size:12px">${f.staff_name||'—'}</td>
+                <td style="font-size:12px; color:var(--text3); max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${f.notes||'—'}</td>
+                <td>
+                  <div style="display:flex; gap:4px">
+                    <a href="/leads/${f.LeadId}" class="btn btn-icon btn-sm" title="View Lead"><i class="fas fa-eye"></i></a>
+                    <button class="btn btn-sm btn-success" onclick="complete(${f.id}, this)" title="Mark Done">
+                      <i class="fas fa-check"></i> Done
+                    </button>
+                  </div>
+                </td>
+              </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+async function complete(id, btn) {
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+  await apiFetch(`/api/followups/${id}/complete`, { method: 'POST' });
+  toast('Follow-up completed!', 'success');
+  btn.closest('tr').remove();
+  loadCounts();
+}
+
+loadCounts();
+loadFollowups('today');
+</script>
+{% endblock %}

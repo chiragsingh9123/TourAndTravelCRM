@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+{% block title %}New Enquiry — Travel CRM{% endblock %}
+{% block nav_new_lead %}active{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>New Enquiry</h1>
+    <div class="sub">Add a new customer lead / enquiry</div>
+  </div>
+  <div class="page-header-actions">
+    <a href="/leads" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Back to Leads</a>
+  </div>
+</div>
+
+<div id="alert-area"></div>
+
+<div style="display:grid; grid-template-columns: 2fr 1fr; gap:20px">
+  <!-- Main Form -->
+  <div>
+    <!-- Customer Info -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="form-section-title"><i class="fas fa-user"></i> Customer Information</div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Customer Name *</label>
+          <input type="text" class="form-control" id="customer_name" placeholder="Full name">
+        </div>
+        <div class="form-group">
+          <label>Primary Mobile *</label>
+          <input type="tel" class="form-control" id="mobile" placeholder="10-digit mobile number">
+        </div>
+        <div class="form-group">
+          <label>Alternate Mobile</label>
+          <input type="tel" class="form-control" id="alt_mobile" placeholder="Optional">
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" class="form-control" id="email" placeholder="Optional">
+        </div>
+        <div class="form-group">
+          <label>City / Location</label>
+          <input type="text" class="form-control" id="city" placeholder="Customer's city">
+        </div>
+        <div class="form-group">
+          <label>Lead Source</label>
+          <select class="form-control" id="lead_source">
+            <option>Call</option>
+            <option>WhatsApp</option>
+            <option>Website</option>
+            <option>Referral</option>
+            <option>Walk-in</option>
+            <option>Other</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tour Info -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="form-section-title"><i class="fas fa-map-location-dot"></i> Tour Information</div>
+      <div class="form-grid">
+        <div class="form-group" style="grid-column: span 2">
+          <label>Tour Package Name *</label>
+          <input type="text" class="form-control" id="tour_name" placeholder="e.g., Ayodhya, Prayagraj & Kashi Tour – 5N/6D">
+        </div>
+        <div class="form-group">
+          <label>Travel Date</label>
+          <input type="date" class="form-control" id="travel_date">
+        </div>
+        <div class="form-group">
+          <label>Enquiry Date</label>
+          <input type="date" class="form-control" id="enquiry_date">
+        </div>
+        <div class="form-group">
+          <label>Pickup Location</label>
+          <input type="text" class="form-control" id="pickup_location" placeholder="e.g., Prayagraj Railway Station">
+        </div>
+        <div class="form-group">
+          <label>Drop Location</label>
+          <input type="text" class="form-control" id="drop_location" placeholder="e.g., Prayagraj Airport">
+        </div>
+        <div class="form-group">
+          <label>No. of Adults</label>
+          <input type="number" class="form-control" id="adults" value="2" min="1">
+        </div>
+        <div class="form-group">
+          <label>No. of Children</label>
+          <input type="number" class="form-control" id="children" value="0" min="0">
+        </div>
+      </div>
+    </div>
+
+    <!-- Package Preferences -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="form-section-title"><i class="fas fa-hotel"></i> Package Preferences</div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Hotel Category</label>
+          <select class="form-control" id="hotel_category">
+            <option>Budget</option>
+            <option selected>Deluxe</option>
+            <option>Premium</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Meal Plan</label>
+          <select class="form-control" id="meal_plan">
+            <option>CP</option>
+            <option selected>MAP</option>
+            <option>AP</option>
+            <option>EP</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Vehicle Type</label>
+          <select class="form-control" id="vehicle_type">
+            <option>Sedan</option>
+            <option>SUV</option>
+            <option>Innova</option>
+            <option>Tempo Traveller</option>
+            <option>Mini Bus</option>
+            <option>Bus</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Initial Status</label>
+          <select class="form-control" id="status">
+            <option selected>New Lead</option>
+            <option>Follow-up</option>
+            <option>Negotiation</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Notes -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="form-section-title"><i class="fas fa-note-sticky"></i> Initial Notes</div>
+      <textarea class="form-control" id="notes" rows="4" placeholder="Any initial conversation notes, special requirements, etc."></textarea>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div>
+    <!-- Assign & Submit -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="form-section-title"><i class="fas fa-user-plus"></i> Assignment</div>
+      <div class="form-group">
+        <label>Assign To</label>
+        <select class="form-control" id="assigned_to">
+          <option value="">— Self —</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" style="width:100%; margin-top:16px; padding:12px" onclick="submitLead()">
+        <i class="fas fa-plus-circle"></i> Create Lead
+      </button>
+      <a href="/leads" class="btn btn-secondary" style="width:100%; margin-top:8px; justify-content:center">
+        Cancel
+      </a>
+    </div>
+
+    <!-- Duplicate Check -->
+    <div class="card" id="dup-card" style="display:none">
+      <div class="form-section-title" style="color:var(--yellow)"><i class="fas fa-triangle-exclamation"></i> Existing Records</div>
+      <div id="dup-results"></div>
+    </div>
+
+    <!-- Quick reference -->
+    <div class="card" style="background:rgba(249,115,22,.05); border-color:rgba(249,115,22,.15)">
+      <div style="font-size:12px; color:var(--text3)">
+        <div style="font-weight:600; color:var(--accent); margin-bottom:8px"><i class="fas fa-lightbulb"></i> Tips</div>
+        <div style="margin-bottom:6px">• Lead ID is auto-generated</div>
+        <div style="margin-bottom:6px">• Duplicate mobile check happens automatically</div>
+        <div style="margin-bottom:6px">• Add conversation notes after saving</div>
+        <div>• Package details can be added from the lead page</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Set today as enquiry date
+document.getElementById('enquiry_date').value = new Date().toISOString().split('T')[0];
+
+// Load staff for assignment (admin/manager only)
+async function loadStaff() {
+  const user = getUser();
+  if (!user || user.role === 'staff') return;
+  const users = await apiFetch('/api/users');
+  if (!users) return;
+  const sel = document.getElementById('assigned_to');
+  users.filter(u => u.role === 'staff' && u.is_active).forEach(u => {
+    sel.innerHTML += `<option value="${u.id}">${u.full_name}</option>`;
+  });
+}
+
+// Check for duplicate mobile
+let dupTimeout;
+document.getElementById('mobile').addEventListener('input', function() {
+  clearTimeout(dupTimeout);
+  const mobile = this.value.trim();
+  if (mobile.length < 10) return;
+  dupTimeout = setTimeout(async () => {
+    const data = await apiFetch(`/api/search?q=${mobile}`);
+    const card = document.getElementById('dup-card');
+    const res = document.getElementById('dup-results');
+    if (data && data.length) {
+      card.style.display = 'block';
+      res.innerHTML = data.map(l => `
+        <a href="/leads/${l.id}" target="_blank" style="display:block; padding:8px; border-radius:8px; border:1px solid var(--border); margin-bottom:8px; text-decoration:none; color:var(--text)">
+          <div style="font-weight:600; font-size:13px">${l.customer_name}</div>
+          <div style="font-size:11px; color:var(--text3)">${l.lead_id} · ${l.tour_name||'N/A'}</div>
+          <div style="margin-top:4px">${statusBadge(l.status)}</div>
+        </a>
+      `).join('');
+    } else {
+      card.style.display = 'none';
+    }
+  }, 600);
+});
+
+async function submitLead() {
+  const required = { customer_name: 'Customer Name', mobile: 'Mobile Number', tour_name: 'Tour Package Name' };
+  for (const [id, label] of Object.entries(required)) {
+    if (!document.getElementById(id).value.trim()) {
+      toast(`${label} is required`, 'error');
+      document.getElementById(id).focus();
+      return;
+    }
+  }
+
+  const mobile = document.getElementById('mobile').value.trim();
+  if (!/^[6-9]\d{9}$/.test(mobile)) {
+    toast('Please enter a valid 10-digit mobile number', 'error');
+    return;
+  }
+
+  const payload = {
+    customer_name: document.getElementById('customer_name').value.trim(),
+    mobile: mobile,
+    alt_mobile: document.getElementById('alt_mobile').value.trim(),
+    email: document.getElementById('email').value.trim(),
+    city: document.getElementById('city').value.trim(),
+    tour_name: document.getElementById('tour_name').value.trim(),
+    travel_date: document.getElementById('travel_date').value || null,
+    pickup_location: document.getElementById('pickup_location').value.trim(),
+    drop_location: document.getElementById('drop_location').value.trim(),
+    adults: parseInt(document.getElementById('adults').value) || 1,
+    children: parseInt(document.getElementById('children').value) || 0,
+    hotel_category: document.getElementById('hotel_category').value,
+    meal_plan: document.getElementById('meal_plan').value,
+    vehicle_type: document.getElementById('vehicle_type').value,
+    lead_source: document.getElementById('lead_source').value,
+    status: document.getElementById('status').value,
+    enquiry_date: document.getElementById('enquiry_date').value,
+    notes: document.getElementById('notes').value.trim(),
+  };
+  const assignedTo = document.getElementById('assigned_to').value;
+  if (assignedTo) payload.assigned_to = parseInt(assignedTo);
+
+  try {
+    const res = await apiFetch('/api/leads', { method: 'POST', body: JSON.stringify(payload) });
+    toast(`Lead ${res.lead_id} created successfully!`, 'success');
+    setTimeout(() => window.location.href = `/leads/${res.id}`, 800);
+  } catch(e) {
+    toast(e.message, 'error');
+  }
+}
+
+loadStaff();
+</script>
+{% endblock %}

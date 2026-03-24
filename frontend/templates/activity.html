@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Activity Log — Travel CRM{% endblock %}
+{% block nav_activity %}active{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Activity Log</h1>
+    <div class="sub">System-wide activity and audit trail</div>
+  </div>
+</div>
+
+<div class="card" style="padding:0; overflow:hidden">
+  <div style="padding:16px 20px; border-bottom:1px solid var(--border)">
+    <input type="text" class="filter-input" id="activity-search" placeholder="Filter by action or user..." style="width:280px">
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Staff</th>
+          <th>Action</th>
+          <th>Details</th>
+        </tr>
+      </thead>
+      <tbody id="activity-tbody">
+        <tr><td colspan="4"><div class="loading"><div class="spinner"></div></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let allLogs = [];
+
+const ACTION_ICONS = {
+  'LOGIN': { icon: 'fa-sign-in-alt', color: 'blue' },
+  'CREATE_LEAD': { icon: 'fa-user-plus', color: 'green' },
+  'UPDATE_LEAD': { icon: 'fa-pen', color: 'yellow' },
+  'ASSIGN_LEAD': { icon: 'fa-user-tag', color: 'purple' },
+  'ADD_CONVERSATION': { icon: 'fa-comment', color: 'blue' },
+  'CREATE_BOOKING': { icon: 'fa-ticket', color: 'green' },
+  'CREATE_USER': { icon: 'fa-user-plus', color: 'orange' },
+};
+
+async function loadActivity() {
+  const data = await apiFetch('/api/activity');
+  if (!data) return;
+  allLogs = data;
+  renderTable(allLogs);
+}
+
+function renderTable(logs) {
+  const tbody = document.getElementById('activity-tbody');
+  if (!logs.length) {
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--text3)">No activity</td></tr>';
+    return;
+  }
+  tbody.innerHTML = logs.map(l => {
+    const meta = ACTION_ICONS[l.action] || { icon: 'fa-circle', color: 'text3' };
+    return `
+      <tr>
+        <td style="color:var(--text3); font-size:12px; white-space:nowrap">
+          ${formatDate(l.created_at)}
+          <div style="font-size:10px">${timeAgo(l.created_at)}</div>
+        </td>
+        <td>
+          <div style="display:flex; align-items:center; gap:8px">
+            <div style="width:28px; height:28px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700">
+              ${(l.full_name||'?').charAt(0)}
+            </div>
+            <span style="font-size:13px; font-weight:500">${l.full_name||'System'}</span>
+          </div>
+        </td>
+        <td>
+          <span style="display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:20px; background:rgba(var(--${meta.color}),0.1); font-size:11px; font-weight:600">
+            <i class="fas ${meta.icon}" style="color:var(--${meta.color})"></i>
+            ${l.action.replace(/_/g,' ')}
+          </span>
+        </td>
+        <td style="font-size:12px; color:var(--text3)">${l.details||'—'}</td>
+      </tr>`;
+  }).join('');
+}
+
+let filterTimeout;
+document.getElementById('activity-search').addEventListener('input', function() {
+  clearTimeout(filterTimeout);
+  const q = this.value.toLowerCase();
+  filterTimeout = setTimeout(() => {
+    renderTable(allLogs.filter(l =>
+      (l.action||'').toLowerCase().includes(q) ||
+      (l.full_name||'').toLowerCase().includes(q) ||
+      (l.details||'').toLowerCase().includes(q)
+    ));
+  }, 300);
+});
+
+loadActivity();
+setInterval(loadActivity, 30000); // Auto-refresh every 30s
+</script>
+{% endblock %}

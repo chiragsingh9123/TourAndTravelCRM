@@ -1,0 +1,1172 @@
+{% extends "base.html" %}
+{% block title %}Lead Detail — Travel CRM{% endblock %}
+
+{% block content %}
+<div class="page-header" id="lead-header">
+  <div>
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:4px">
+      <a href="/leads" style="color:var(--text3); font-size:12px"><i class="fas fa-arrow-left"></i> All Leads</a>
+    </div>
+    <h1 id="lead-title">Loading...</h1>
+    <div style="display:flex; align-items:center; gap:10px; margin-top:6px" id="lead-meta"></div>
+  </div>
+  <div class="page-header-actions" id="lead-actions"></div>
+</div>
+
+<div style="display:grid; grid-template-columns:1fr 360px; gap:20px" id="lead-layout">
+  <!-- Left Column -->
+  <div>
+    <!-- Tabs -->
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('timeline')"><i class="fas fa-comments"></i> Timeline</div>
+      <div class="tab" onclick="switchTab('package')"><i class="fas fa-suitcase"></i> Package</div>
+      <div class="tab" onclick="switchTab('booking')"><i class="fas fa-ticket"></i> Booking</div>
+      <div class="tab" onclick="switchTab('payments')"><i class="fas fa-rupee-sign"></i> Payments</div>
+      <div class="tab" onclick="switchTab('whatsapp')"><i class="fab fa-whatsapp"></i> WhatsApp</div>
+      <div class="tab" onclick="switchTab('history')"><i class="fas fa-history"></i> History</div>
+    </div>
+
+    <!-- Timeline Tab -->
+    <div id="tab-timeline">
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title"><i class="fas fa-plus"></i> Add Conversation</div>
+        <div class="form-grid" style="grid-template-columns:1fr 1fr">
+          <div class="form-group">
+            <label>Call Type</label>
+            <select class="form-control" id="call_type"><option>Outgoing</option><option>Incoming</option></select>
+          </div>
+          <div class="form-group">
+            <label>Call Result *</label>
+            <select class="form-control" id="call_result">
+              <option value="">Select result...</option>
+              <option>Not Connected</option><option>Call Not Picked</option><option>Customer Busy</option>
+              <option>Interested</option><option>Call Later</option><option>Not Interested</option>
+              <option>Package Sent</option><option>Booking Confirmed</option><option>Other</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Call Duration (mins)</label>
+            <input type="number" class="form-control" id="call_duration" min="0" placeholder="e.g. 5">
+          </div>
+          <div class="form-group">
+            <label>Next Follow-up Date</label>
+            <input type="date" class="form-control" id="next_followup_date">
+          </div>
+          <div class="form-group" style="grid-column:span 2">
+            <label>Conversation Summary</label>
+            <textarea class="form-control" id="conv_summary" rows="3" placeholder="What was discussed?..."></textarea>
+          </div>
+          <div class="form-group">
+            <label>Update Lead Status</label>
+            <select class="form-control" id="status_update">
+              <option value="">— No change —</option>
+              <option>New Lead</option><option>Follow-up</option><option>Negotiation</option><option>Booked</option><option>Lost</option>
+            </select>
+          </div>
+          <div class="form-group" style="display:flex; align-items:flex-end">
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer; margin-bottom:0">
+              <input type="checkbox" id="send_whatsapp_after" style="width:16px;height:16px">
+              <span style="font-size:13px">Send WhatsApp after saving</span>
+            </label>
+          </div>
+        </div>
+        <button class="btn btn-primary" style="margin-top:12px" onclick="addConversation()">
+          <i class="fas fa-paper-plane"></i> Save Conversation
+        </button>
+      </div>
+      <div id="timeline-list"><div class="loading"><div class="spinner"></div> Loading timeline...</div></div>
+    </div>
+
+    <!-- Package Tab -->
+    <div id="tab-package" style="display:none">
+      <div class="card" style="margin-bottom:16px">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
+          <div class="card-title" style="margin-bottom:0"><i class="fas fa-suitcase"></i> Package Builder</div>
+          <button class="btn btn-primary btn-sm" onclick="initPackage()"><i class="fas fa-plus"></i> New Package</button>
+        </div>
+
+        <!-- Category Banner -->
+        <div id="pkg-category-banner" style="display:none; background:rgba(249,115,22,.06); border:1px solid rgba(249,115,22,.2); border-radius:10px; padding:12px 14px; margin-bottom:14px">
+          <div style="font-size:11px; color:var(--text3); margin-bottom:6px; font-weight:600; text-transform:uppercase; letter-spacing:.4px">
+            <i class="fas fa-layer-group"></i> Tour Category (linked to this lead)
+          </div>
+          <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap">
+            <span id="pkg-cat-chip" style="display:inline-flex; align-items:center; gap:6px; background:var(--accent); color:#fff; border-radius:20px; padding:4px 12px; font-size:12px; font-weight:600"></span>
+            <span id="pkg-subcat-chip" style="display:none; align-items:center; gap:6px; background:var(--surface2); color:var(--text); border-radius:20px; padding:4px 12px; font-size:12px; border:1px solid var(--border)"></span>
+            <button class="btn btn-secondary btn-sm" onclick="openEditModal()" style="margin-left:auto">
+              <i class="fas fa-edit"></i> Change Category
+            </button>
+          </div>
+        </div>
+
+        <div id="existing-packages"></div>
+      </div>
+
+      <!-- Package Form -->
+      <div class="card" id="package-form" style="display:none">
+        <div class="form-section-title"><i class="fas fa-edit"></i> Package Details</div>
+
+        <!-- Quick Fill bar -->
+        <div id="pkg-quick-fill-bar" style="display:none; background:var(--surface2); border-radius:8px; padding:10px 14px; margin-bottom:14px; font-size:13px; display:flex; align-items:center; gap:8px; flex-wrap:wrap">
+          <i class="fas fa-magic" style="color:var(--accent)"></i>
+          <span>Quick Fill from sub-category: <strong id="pkg-quick-fill-name" style="color:var(--accent)"></strong></span>
+          <button class="btn btn-primary btn-sm" onclick="quickFillFromSubcat()"><i class="fas fa-bolt"></i> Auto Fill</button>
+        </div>
+
+        <div class="form-group" style="margin-bottom:16px">
+          <label>Package Name</label>
+          <input type="text" class="form-control" id="pkg_name" placeholder="e.g., Ayodhya Prayagraj Kashi 5N6D">
+        </div>
+
+        <!-- Itinerary -->
+        <div style="margin-bottom:16px">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
+            <div class="form-section-title" style="margin-bottom:0"><i class="fas fa-calendar"></i> Itinerary</div>
+            <button class="btn btn-secondary btn-sm" onclick="addItineraryDay()"><i class="fas fa-plus"></i> Add Day</button>
+          </div>
+          <div id="itinerary-days"></div>
+        </div>
+
+        <!-- Hotels -->
+        <div style="margin-bottom:16px">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
+            <div class="form-section-title" style="margin-bottom:0"><i class="fas fa-hotel"></i> Hotels</div>
+            <button class="btn btn-secondary btn-sm" onclick="addHotel()"><i class="fas fa-plus"></i> Add Hotel</button>
+          </div>
+          <div id="hotel-list"></div>
+        </div>
+
+        <!-- Transport -->
+        <div class="card" style="margin-bottom:16px; background:var(--surface2)">
+          <div class="form-section-title"><i class="fas fa-car"></i> Transport</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Vehicle Type</label>
+              <!-- ✅ UPDATED: New vehicle options -->
+              <select class="form-control" id="pkg_vehicle">
+                <optgroup label="Sedan / Hatchback">
+                  <option value="Sedan">Sedan</option>
+                </optgroup>
+                <optgroup label="MUV / SUV">
+                  <option value="Ertiga">Ertiga</option>
+                  <option value="Kia">Kia (Carens / Seltos)</option>
+                  <option value="Innova">Innova</option>
+                  <option value="Innova Crysta">Innova Crysta</option>
+                  <option value="Cruiser">Cruiser (Innova HyCross)</option>
+                </optgroup>
+                <optgroup label="Tempo Traveller">
+                  <option value="14 Seater">14 Seater Tempo Traveller</option>
+                  <option value="17 Seater">17 Seater Tempo Traveller</option>
+                </optgroup>
+                <optgroup label="Mini Bus / Coach">
+                  <option value="25 Seater">25 Seater Mini Bus</option>
+                  <option value="Urbania">Urbania (Force)</option>
+                  <option value="45 Seater Non AC">45 Seater Bus (Non A/C)</option>
+                  <option value="45 Seater AC">45 Seater Bus (A/C)</option>
+                </optgroup>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Transport Cost (₹)</label>
+              <input type="number" class="form-control" id="pkg_transport_cost" placeholder="0" oninput="recalcTotal()">
+            </div>
+          </div>
+        </div>
+
+        <!-- Other Charges -->
+        <div style="margin-bottom:16px">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
+            <div class="form-section-title" style="margin-bottom:0"><i class="fas fa-receipt"></i> Other Charges</div>
+            <button class="btn btn-secondary btn-sm" onclick="addCharge()"><i class="fas fa-plus"></i> Add</button>
+          </div>
+          <div id="charges-list"></div>
+        </div>
+
+        <!-- Pricing -->
+        <div class="card" style="background:rgba(249,115,22,.05); border-color:rgba(249,115,22,.2)">
+          <div class="form-section-title" style="color:var(--accent)"><i class="fas fa-calculator"></i> Price Summary</div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px">
+            <div class="form-group"><label>Hotel Total (₹)</label><input type="number" class="form-control" id="pkg_hotel_total" readonly style="background:var(--surface)"></div>
+            <div class="form-group"><label>Base Price (₹)</label><input type="number" class="form-control" id="pkg_base" readonly style="background:var(--surface)"></div>
+            <div class="form-group"><label>Discount (₹)</label><input type="number" class="form-control" id="pkg_discount" value="0" oninput="recalcTotal()"></div>
+            <div class="form-group"><label>Final Price (₹)</label><input type="number" class="form-control" id="pkg_final" style="font-size:16px;font-weight:700;color:var(--green)"></div>
+          </div>
+          <textarea class="form-control" id="pkg_notes" rows="2" placeholder="Package notes, inclusions, exclusions..." style="margin-top:12px"></textarea>
+        </div>
+        <div style="display:flex; gap:8px; margin-top:16px">
+          <button class="btn btn-primary" onclick="savePackage()"><i class="fas fa-save"></i> Save Package</button>
+          <button class="btn btn-secondary" onclick="document.getElementById('package-form').style.display='none'">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Booking Tab -->
+    <div id="tab-booking" style="display:none">
+      <div id="existing-booking"></div>
+      <div class="card" id="booking-form">
+        <div class="card-title"><i class="fas fa-ticket"></i> Convert to Booking</div>
+        <div id="booking-warning" class="alert alert-info" style="display:none"><i class="fas fa-info-circle"></i> This lead already has a booking.</div>
+        <div class="form-grid">
+          <div class="form-group"><label>Total Amount (₹)</label><input type="number" class="form-control" id="bk_total" oninput="calcBalance()"></div>
+          <div class="form-group"><label>Discount (₹)</label><input type="number" class="form-control" id="bk_discount" value="0" oninput="calcBalance()"></div>
+          <div class="form-group"><label>Final Amount (₹)</label><input type="number" class="form-control" id="bk_final" style="font-weight:700;color:var(--green)"></div>
+          <div class="form-group"><label>Advance Received (₹)</label><input type="number" class="form-control" id="bk_advance" value="0" oninput="calcBalance()"></div>
+          <div class="form-group"><label>Balance (₹)</label><input type="number" class="form-control" id="bk_balance" readonly style="color:var(--red)"></div>
+          <div class="form-group"><label>Payment Method</label><select class="form-control" id="bk_payment_method"><option>Cash</option><option>UPI</option><option>Bank Transfer</option><option>Cheque</option><option>Card</option><option>Other</option></select></div>
+          <div class="form-group"><label>Payment Date</label><input type="date" class="form-control" id="bk_payment_date"></div>
+        </div>
+        <textarea class="form-control" id="bk_notes" rows="2" placeholder="Booking notes..." style="margin-top:12px"></textarea>
+        <button class="btn btn-success" style="margin-top:16px" onclick="createBooking()"><i class="fas fa-check-circle"></i> Confirm Booking</button>
+      </div>
+    </div>
+
+    <!-- Payments Tab -->
+    <div id="tab-payments" style="display:none">
+      <div id="payment-summary-card"></div>
+      <div class="card" style="margin-bottom:16px" id="add-payment-card">
+        <div class="card-title"><i class="fas fa-plus"></i> Record Payment</div>
+        <div class="form-grid">
+          <div class="form-group"><label>Amount (₹) *</label><input type="number" class="form-control" id="pay_amount" placeholder="Enter amount"></div>
+          <div class="form-group"><label>Payment Method</label><select class="form-control" id="pay_method"><option>Cash</option><option>UPI</option><option>Bank Transfer</option><option>Cheque</option><option>Card</option><option>Other</option></select></div>
+          <div class="form-group"><label>Payment Date</label><input type="date" class="form-control" id="pay_date"></div>
+          <div class="form-group"><label>Reference / UTR No.</label><input type="text" class="form-control" id="pay_ref" placeholder="Optional"></div>
+          <div class="form-group" style="grid-column:span 2"><label>Notes</label><input type="text" class="form-control" id="pay_notes" placeholder="e.g., Partial advance..."></div>
+        </div>
+        <button class="btn btn-success" style="margin-top:12px" onclick="addPayment()"><i class="fas fa-rupee-sign"></i> Save Payment</button>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-list"></i> Payment History</div>
+        <div id="payment-history-list"><div style="color:var(--text3);text-align:center;padding:20px;font-size:13px">No booking found. Create a booking first.</div></div>
+      </div>
+    </div>
+
+    <!-- WhatsApp Tab -->
+    <div id="tab-whatsapp" style="display:none">
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title"><i class="fab fa-whatsapp" style="color:#25D366"></i> Send WhatsApp Message</div>
+        <div style="margin-bottom:12px">
+          <label style="font-size:12px; color:var(--text3); margin-bottom:8px; display:block">Quick Templates</label>
+          <div style="display:flex; gap:8px; flex-wrap:wrap">
+            <button class="btn btn-secondary btn-sm" onclick="applyWATemplate('greeting')">👋 Greeting</button>
+            <button class="btn btn-secondary btn-sm" onclick="applyWATemplate('followup')">🔔 Follow-up</button>
+            <button class="btn btn-secondary btn-sm" onclick="applyWATemplate('package_sent')">📦 Package Sent</button>
+            <button class="btn btn-secondary btn-sm" onclick="applyWATemplate('booking_confirm')">✅ Booking Confirmed</button>
+            <button class="btn btn-secondary btn-sm" onclick="applyWATemplate('balance_due')">💰 Balance Due</button>
+            <button class="btn btn-secondary btn-sm" onclick="applyWATemplate('itinerary')">🗺️ Itinerary</button>
+          </div>
+        </div>
+        <div class="form-group"><label>Message</label><textarea class="form-control" id="wa_message" rows="6" placeholder="Type your message or select a template..."></textarea></div>
+        <div style="display:flex; gap:8px; margin-top:12px; align-items:center">
+          <button class="btn btn-success" onclick="sendWhatsApp()" style="background:#25D366;border-color:#25D366"><i class="fab fa-whatsapp"></i> Open in WhatsApp</button>
+          <button class="btn btn-secondary" onclick="logWhatsApp()"><i class="fas fa-save"></i> Log Only</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-history"></i> Message Log</div>
+        <div id="whatsapp-log-list"><div class="loading"><div class="spinner"></div> Loading...</div></div>
+      </div>
+    </div>
+
+    <!-- History Tab -->
+    <div id="tab-history" style="display:none">
+      <div class="card">
+        <div class="card-title"><i class="fas fa-history"></i> Previous Interactions (Same Mobile)</div>
+        <div id="history-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Column -->
+  <div>
+    <!-- Lead Score -->
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
+        <div class="card-title" style="margin-bottom:0"><i class="fas fa-star"></i> Lead Score</div>
+        <span id="score-badge" style="font-size:18px; font-weight:700">—</span>
+      </div>
+      <div style="background:var(--surface2); border-radius:6px; height:8px; overflow:hidden; margin-bottom:8px">
+        <div id="score-bar" style="height:100%; border-radius:6px; width:0%; transition:width .6s ease; background:var(--green)"></div>
+      </div>
+      <div id="score-factors" style="font-size:12px; color:var(--text3)"></div>
+    </div>
+
+    <!-- Tour Category Card -->
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
+        <div class="card-title" style="margin-bottom:0"><i class="fas fa-layer-group"></i> Tour Category</div>
+        <button class="btn btn-secondary btn-sm" onclick="openEditModal()"><i class="fas fa-edit"></i></button>
+      </div>
+      <div id="tour-category-display">
+        <div style="color:var(--text3); font-size:12px; text-align:center; padding:8px">Not assigned</div>
+      </div>
+    </div>
+
+    <!-- Pinned Notes -->
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
+        <div class="card-title" style="margin-bottom:0"><i class="fas fa-thumbtack"></i> Pinned Notes</div>
+        <button class="btn btn-secondary btn-sm" onclick="openAddNoteModal()"><i class="fas fa-plus"></i></button>
+      </div>
+      <div id="pinned-notes-list"><div style="color:var(--text3); font-size:12px; text-align:center; padding:10px">No pinned notes</div></div>
+    </div>
+
+    <!-- Customer Card -->
+    <div class="card" style="margin-bottom:16px" id="customer-card">
+      <div style="text-align:center; margin-bottom:16px">
+        <div style="width:60px; height:60px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; font-size:24px; font-weight:700; margin:0 auto 10px">?</div>
+        <div style="font-size:18px; font-weight:700" id="detail-name">—</div>
+        <div style="color:var(--text3); font-size:12px" id="detail-city"></div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:8px; font-size:13px">
+        <div style="display:flex; align-items:center; gap:8px">
+          <i class="fas fa-phone" style="color:var(--accent); width:16px"></i>
+          <span id="detail-mobile">—</span>
+          <a id="quick-call-btn" href="#" style="margin-left:auto; color:var(--green); font-size:13px"><i class="fas fa-phone-volume"></i></a>
+          <a id="quick-wa-btn" href="#" style="color:#25D366; font-size:13px"><i class="fab fa-whatsapp"></i></a>
+        </div>
+        <div id="detail-alt-mobile-row" style="display:flex; align-items:center; gap:8px">
+          <i class="fas fa-phone-flip" style="color:var(--text3); width:16px"></i><span id="detail-alt-mobile"></span>
+        </div>
+        <div id="detail-email-row" style="display:flex; align-items:center; gap:8px">
+          <i class="fas fa-envelope" style="color:var(--text3); width:16px"></i><span id="detail-email"></span>
+        </div>
+        <hr style="border-color:var(--border); margin:4px 0">
+        <div style="display:flex; align-items:center; gap:8px"><i class="fas fa-map-pin" style="color:var(--blue); width:16px"></i><span id="detail-tour"></span></div>
+        <div style="display:flex; align-items:center; gap:8px"><i class="fas fa-calendar" style="color:var(--text3); width:16px"></i><span id="detail-travel-date"></span></div>
+        <div style="display:flex; align-items:center; gap:8px"><i class="fas fa-car" style="color:var(--text3); width:16px"></i><span id="detail-vehicle"></span></div>
+        <div style="display:flex; align-items:center; gap:8px"><i class="fas fa-hotel" style="color:var(--text3); width:16px"></i><span id="detail-hotel"></span></div>
+        <div style="display:flex; align-items:center; gap:8px"><i class="fas fa-people-group" style="color:var(--text3); width:16px"></i><span id="detail-pax"></span></div>
+        <div style="display:flex; align-items:center; gap:8px"><i class="fas fa-tag" style="color:var(--text3); width:16px"></i><span id="detail-source"></span></div>
+        <hr style="border-color:var(--border); margin:4px 0">
+        <div style="display:flex; align-items:center; gap:8px"><i class="fas fa-user-tie" style="color:var(--accent); width:16px"></i><span id="detail-assigned"></span></div>
+      </div>
+      <div style="margin-top:16px; display:flex; gap:8px">
+        <button class="btn btn-secondary btn-sm" style="flex:1" onclick="openEditModal()"><i class="fas fa-edit"></i> Edit Lead Info</button>
+        <button class="btn btn-secondary btn-sm" onclick="duplicateLead()" title="Duplicate Lead"><i class="fas fa-copy"></i></button>
+      </div>
+    </div>
+
+    <!-- Follow-ups -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title"><i class="fas fa-calendar-check"></i> Upcoming Follow-ups</div>
+      <div id="upcoming-followups"></div>
+    </div>
+
+    <!-- Call Stats -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title"><i class="fas fa-chart-bar"></i> Call Stats</div>
+      <div id="call-stats-content" style="font-size:13px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Lead Modal -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal" style="max-width:620px">
+    <div class="modal-header">
+      <div class="modal-title">Edit Lead Information</div>
+      <button class="modal-close" onclick="closeModal('edit-modal')">&times;</button>
+    </div>
+    <div class="form-grid">
+      <div class="form-group"><label>Customer Name</label><input type="text" class="form-control" id="edit-name"></div>
+      <div class="form-group"><label>Mobile</label><input type="tel" class="form-control" id="edit-mobile"></div>
+      <div class="form-group"><label>Alt Mobile</label><input type="tel" class="form-control" id="edit-alt-mobile"></div>
+      <div class="form-group"><label>City</label><input type="text" class="form-control" id="edit-city"></div>
+      <div class="form-group" style="grid-column:span 2"><label>Tour Name</label><input type="text" class="form-control" id="edit-tour"></div>
+      <div class="form-group"><label>Travel Date</label><input type="date" class="form-control" id="edit-travel-date"></div>
+      <div class="form-group"><label>Status</label>
+        <select class="form-control" id="edit-status">
+          <option>New Lead</option><option>Follow-up</option><option>Negotiation</option><option>Booked</option><option>Lost</option>
+        </select>
+      </div>
+
+      <!-- ✅ UPDATED: Hotel Category with new options -->
+      <div class="form-group">
+        <label>Hotel Category</label>
+        <select class="form-control" id="edit-hotel-category">
+          <option value="Standard">Standard</option>
+          <option value="Deluxe">Deluxe</option>
+          <option value="2 Star">2 Star</option>
+          <option value="3 Star">3 Star</option>
+          <option value="4 Star">4 Star</option>
+          <option value="5 Star">5 Star</option>
+        </select>
+      </div>
+
+      <!-- ✅ UPDATED: Vehicle Type with new options -->
+      <div class="form-group">
+        <label>Vehicle Type</label>
+        <select class="form-control" id="edit-vehicle-type">
+          <optgroup label="Sedan / Hatchback">
+            <option value="Sedan">Sedan</option>
+          </optgroup>
+          <optgroup label="MUV / SUV">
+            <option value="Ertiga">Ertiga</option>
+            <option value="Kia">Kia (Carens / Seltos)</option>
+            <option value="Innova">Innova</option>
+            <option value="Innova Crysta">Innova Crysta</option>
+            <option value="Cruiser">Cruiser (Innova HyCross)</option>
+          </optgroup>
+          <optgroup label="Tempo Traveller">
+            <option value="14 Seater">14 Seater Tempo Traveller</option>
+            <option value="17 Seater">17 Seater Tempo Traveller</option>
+          </optgroup>
+          <optgroup label="Mini Bus / Coach">
+            <option value="25 Seater">25 Seater Mini Bus</option>
+            <option value="Urbania">Urbania (Force)</option>
+            <option value="45 Seater Non AC">45 Seater Bus (Non A/C)</option>
+            <option value="45 Seater AC">45 Seater Bus (A/C)</option>
+          </optgroup>
+        </select>
+      </div>
+
+      <!-- Tour Category Section -->
+      <div class="form-group" style="grid-column:span 2">
+        <div style="border-top:1px solid var(--border); margin:4px 0 12px; padding-top:14px">
+          <div style="font-size:12px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:.4px; margin-bottom:10px">
+            <i class="fas fa-layer-group" style="color:var(--accent)"></i> Tour Category
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px">
+            <div class="form-group" style="margin:0">
+              <label>Category</label>
+              <select class="form-control" id="edit-tour-category" onchange="onEditCategoryChange()">
+                <option value="">— Select Category —</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin:0">
+              <label>Sub-Category</label>
+              <select class="form-control" id="edit-tour-subcategory" onchange="onEditSubcategoryChange()">
+                <option value="">— Select Sub-Category —</option>
+              </select>
+            </div>
+          </div>
+          <!-- Sub-category preview -->
+          <div id="subcat-preview" style="display:none; margin-top:10px; background:var(--surface2); border-radius:8px; padding:10px 14px; font-size:12px">
+            <div style="display:flex; gap:16px; flex-wrap:wrap; align-items:center">
+              <span id="preview-duration" style="color:var(--text3)"></span>
+              <span id="preview-price" style="color:var(--green); font-weight:600"></span>
+              <span id="preview-tags" style="color:var(--blue)"></span>
+            </div>
+            <div id="preview-desc" style="color:var(--text3); margin-top:4px"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group" id="edit-assign-row" style="display:none">
+        <label>Assign To</label>
+        <select class="form-control" id="edit-assigned"></select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('edit-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEdit()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Note Modal -->
+<div class="modal-overlay" id="note-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title"><i class="fas fa-thumbtack"></i> Add Pinned Note</div>
+      <button class="modal-close" onclick="closeModal('note-modal')">&times;</button>
+    </div>
+    <div class="form-group"><label>Note</label><textarea class="form-control" id="note-text" rows="4" placeholder="e.g., Customer prefers morning calls..."></textarea></div>
+    <div class="form-group" style="margin-top:12px">
+      <label>Color Tag</label>
+      <div style="display:flex; gap:8px; margin-top:6px">
+        <span onclick="selectNoteColor('yellow')" style="cursor:pointer;width:28px;height:28px;border-radius:50%;background:#F59E0B;display:flex;align-items:center;justify-content:center" id="nc-yellow"><i class="fas fa-check" style="color:#fff;font-size:12px;display:none"></i></span>
+        <span onclick="selectNoteColor('blue')" style="cursor:pointer;width:28px;height:28px;border-radius:50%;background:#3B82F6;display:flex;align-items:center;justify-content:center" id="nc-blue"><i class="fas fa-check" style="color:#fff;font-size:12px;display:none"></i></span>
+        <span onclick="selectNoteColor('green')" style="cursor:pointer;width:28px;height:28px;border-radius:50%;background:#10B981;display:flex;align-items:center;justify-content:center" id="nc-green"><i class="fas fa-check" style="color:#fff;font-size:12px;display:none"></i></span>
+        <span onclick="selectNoteColor('red')" style="cursor:pointer;width:28px;height:28px;border-radius:50%;background:#EF4444;display:flex;align-items:center;justify-content:center" id="nc-red"><i class="fas fa-check" style="color:#fff;font-size:12px;display:none"></i></span>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('note-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveNote()"><i class="fas fa-thumbtack"></i> Pin Note</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const LEAD_ID = {{ lead_id }};
+let leadData = null;
+let itineraryDays = [], hotels = [], otherCharges = [];
+let currentPkgId = null;
+let selectedNoteColor = 'yellow';
+let allCategories = [];
+let currentSubcatData = null;
+
+const RESULT_COLORS = {'Not Connected':'red','Call Not Picked':'red','Customer Busy':'yellow','Interested':'green','Call Later':'yellow','Not Interested':'red','Package Sent':'blue','Booking Confirmed':'green','Other':'purple'};
+const RESULT_ICONS  = {'Not Connected':'fa-phone-slash','Call Not Picked':'fa-phone-volume','Customer Busy':'fa-phone-flip','Interested':'fa-thumbs-up','Call Later':'fa-clock','Not Interested':'fa-thumbs-down','Package Sent':'fa-paper-plane','Booking Confirmed':'fa-check-circle','Other':'fa-comment'};
+
+// ✅ Hotel category options (centralised — used in addHotel() rows)
+const HOTEL_CATEGORIES = ['Standard','Deluxe','2 Star','3 Star','4 Star','5 Star'];
+
+// ✅ Vehicle type options (centralised — used wherever vehicles are listed)
+const VEHICLE_OPTIONS = [
+  { group: 'Sedan / Hatchback',  options: [{ value:'Sedan', label:'Sedan' }] },
+  { group: 'MUV / SUV',          options: [
+      { value:'Ertiga',        label:'Ertiga' },
+      { value:'Kia',           label:'Kia (Carens / Seltos)' },
+      { value:'Innova',        label:'Innova' },
+      { value:'Innova Crysta', label:'Innova Crysta' },
+      { value:'Cruiser',       label:'Cruiser (Innova HyCross)' }
+  ]},
+  { group: 'Tempo Traveller',    options: [
+      { value:'14 Seater', label:'14 Seater Tempo Traveller' },
+      { value:'17 Seater', label:'17 Seater Tempo Traveller' }
+  ]},
+  { group: 'Mini Bus / Coach',   options: [
+      { value:'25 Seater',         label:'25 Seater Mini Bus' },
+      { value:'Urbania',           label:'Urbania (Force)' },
+      { value:'45 Seater Non AC',  label:'45 Seater Bus (Non A/C)' },
+      { value:'45 Seater AC',      label:'45 Seater Bus (A/C)' }
+  ]}
+];
+
+// Helper: build <optgroup> HTML for a vehicle select
+function buildVehicleOptions(selectedValue) {
+  return VEHICLE_OPTIONS.map(g =>
+    `<optgroup label="${g.group}">${g.options.map(o =>
+      `<option value="${o.value}"${o.value===selectedValue?' selected':''}>${o.label}</option>`
+    ).join('')}</optgroup>`
+  ).join('');
+}
+
+// Helper: build hotel-category <option> list
+function buildHotelCategoryOptions(selectedValue) {
+  return HOTEL_CATEGORIES.map(c =>
+    `<option value="${c}"${c===selectedValue?' selected':''}>${c}</option>`
+  ).join('');
+}
+
+const WA_TEMPLATES = {
+  greeting:        ()=>`नमस्ते ${leadData?.customer_name||''}जी! 🙏\n\nहम Travel CRM से बोल रहे हैं। आपकी ${leadData?.tour_name||'यात्रा'} की enquiry के बारे में बात करना था।\n\nकृपया एक बार call करें या reply करें।\n\nधन्यवाद 🙏`,
+  followup:        ()=>`नमस्ते ${leadData?.customer_name||''}जी! 🙏\n\nआपकी ${leadData?.tour_name||'यात्रा'} की enquiry के बारे में follow-up कर रहे हैं।\n\nक्या आपने हमारा package देख लिया? कोई query हो तो बताइए।\n\nधन्यवाद!`,
+  package_sent:    ()=>`नमस्ते ${leadData?.customer_name||''}जी! 🙏\n\n${leadData?.tour_name||'Tour'} के लिए हमारा package भेज दिया है।\n\nPlease check करें।\n\nधन्यवाद!`,
+  booking_confirm: ()=>`🎉 Booking Confirmed!\n\nनमस्ते ${leadData?.customer_name||''}जी!\n\nआपकी ${leadData?.tour_name||'यात्रा'} की booking confirm हो गई है।\nTravel Date: ${leadData?.travel_date||'TBD'}\nPax: ${leadData?.adults||0} Adults, ${leadData?.children||0} Children\n\nHappy Journey! 🚗✨`,
+  balance_due:     ()=>`नमस्ते ${leadData?.customer_name||''}जी,\n\nआपकी ${leadData?.tour_name||'यात्रा'} का balance amount pending है।\n\nकृपया travel date से पहले payment clear कर दें।\n\nधन्यवाद!`,
+  itinerary:       ()=>`नमस्ते ${leadData?.customer_name||''}जी! 🙏\n\n${leadData?.tour_name||'Tour'} का itinerary:\n${buildItinerarySummary()}\n\nTravel Date: ${leadData?.travel_date||'TBD'}\nVehicle: ${leadData?.vehicle_type||''}\n\nकोई changes चाहिए तो बताइए!`
+};
+
+function buildItinerarySummary() {
+  if (!leadData?.packages?.length) return '(Package details will be shared separately)';
+  const pkg = leadData.packages[0];
+  if (!pkg.itinerary || !Array.isArray(pkg.itinerary)) return '(See package for details)';
+  return pkg.itinerary.map(d=>`Day ${d.day}: ${d.description}`).join('\n');
+}
+
+// ── BOOT ──────────────────────────────────────────────────────
+async function loadLead() {
+  leadData = await apiFetch(`/api/leads/${LEAD_ID}`);
+  if (!leadData) return;
+  allCategories = await apiFetch('/api/tour-categories') || [];
+  renderHeader(); renderCustomerCard(); renderTourCategoryCard();
+  renderTimeline(); renderPackages(); renderBooking();
+  renderHistory(); renderFollowups(); renderLeadScore();
+  renderCallStats(); renderPinnedNotes(); renderPayments(); renderWhatsAppLog();
+}
+
+function renderHeader() {
+  document.getElementById('lead-title').textContent = leadData.customer_name;
+  document.getElementById('lead-meta').innerHTML = `
+    <code style="background:rgba(249,115,22,.1);color:var(--accent);padding:4px 8px;border-radius:6px;font-size:12px">${leadData.lead_id}</code>
+    ${statusBadge(leadData.status)}
+    <span style="color:var(--text3);font-size:12px">Enquiry: ${formatDate(leadData.enquiry_date||leadData.created_at)}</span>`;
+  document.getElementById('lead-actions').innerHTML = `
+    <button class="btn btn-secondary btn-sm" onclick="duplicateLead()"><i class="fas fa-copy"></i> Duplicate</button>
+    <button class="btn btn-primary btn-sm" onclick="switchTab('booking')"><i class="fas fa-ticket"></i> Book Now</button>`;
+}
+
+function renderCustomerCard() {
+  const l = leadData;
+  const avatar = document.querySelector('#customer-card div[style*="60px"]');
+  if (avatar) avatar.textContent = l.customer_name.charAt(0).toUpperCase();
+  document.getElementById('detail-name').textContent = l.customer_name;
+  document.getElementById('detail-city').textContent = l.city||'';
+  document.getElementById('detail-mobile').textContent = l.mobile;
+  document.getElementById('detail-alt-mobile').textContent = l.alt_mobile||'';
+  document.getElementById('detail-alt-mobile-row').style.display = l.alt_mobile?'':'none';
+  document.getElementById('detail-email').textContent = l.email||'';
+  document.getElementById('detail-email-row').style.display = l.email?'':'none';
+  document.getElementById('detail-tour').textContent = l.tour_name||'—';
+  document.getElementById('detail-travel-date').textContent = formatDate(l.travel_date)||'—';
+  document.getElementById('detail-vehicle').textContent = `${l.vehicle_type} · ${l.hotel_category}`;
+  document.getElementById('detail-hotel').textContent = `${l.meal_plan} Meal Plan`;
+  document.getElementById('detail-pax').textContent = `${l.adults} Adults, ${l.children} Children`;
+  document.getElementById('detail-source').textContent = `Source: ${l.lead_source}`;
+  document.getElementById('detail-assigned').textContent = `Assigned: ${l.assigned_name||'Unassigned'}`;
+  document.getElementById('quick-call-btn').href = `tel:${l.mobile}`;
+  document.getElementById('quick-wa-btn').href = `https://wa.me/91${l.mobile}`;
+  document.getElementById('quick-wa-btn').target = '_blank';
+}
+
+// ── TOUR CATEGORY SIDEBAR ─────────────────────────────────────
+function renderTourCategoryCard() {
+  const el = document.getElementById('tour-category-display');
+  const catId = leadData.tour_category_id;
+  const subId = leadData.tour_subcategory_id;
+  if (!catId) {
+    el.innerHTML = `<div style="text-align:center;padding:10px"><div style="color:var(--text3);font-size:12px;margin-bottom:8px">No category assigned</div><button class="btn btn-secondary btn-sm" onclick="openEditModal()"><i class="fas fa-plus"></i> Assign Category</button></div>`;
+    document.getElementById('pkg-category-banner').style.display = 'none';
+    return;
+  }
+  const cat = allCategories.find(c => c.id === catId);
+  if (!cat) return;
+  const sub = (cat.subcategories||[]).find(s => s.id === subId);
+  const color = cat.color||'#F97316';
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface2);border-radius:10px;margin-bottom:8px">
+      <div style="width:36px;height:36px;border-radius:8px;background:${color}22;color:${color};display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0"><i class="fas ${cat.icon||'fa-layer-group'}"></i></div>
+      <div>
+        <div style="font-weight:700;font-size:13px">${cat.name}</div>
+        ${sub?`<div style="font-size:11px;color:var(--text3)">${sub.name}${sub.duration_days?` · ${sub.duration_nights}N/${sub.duration_days}D`:''}</div>`:'<div style="font-size:11px;color:var(--text3)">No sub-category selected</div>'}
+      </div>
+    </div>
+    ${sub&&sub.starting_price?`<div style="font-size:12px;color:var(--green);padding-left:2px"><i class="fas fa-rupee-sign"></i> Starting from ₹${Number(sub.starting_price).toLocaleString('en-IN')}</div>`:''}
+    ${sub&&sub.tags?`<div style="font-size:11px;color:var(--blue);margin-top:4px;padding-left:2px"><i class="fas fa-tags"></i> ${sub.tags}</div>`:''}`;
+  renderPackageCategoryBanner(cat, sub);
+}
+
+function renderPackageCategoryBanner(cat, sub) {
+  const banner = document.getElementById('pkg-category-banner');
+  if (!cat) { banner.style.display='none'; return; }
+  banner.style.display = 'block';
+  const catChip = document.getElementById('pkg-cat-chip');
+  catChip.style.background = cat.color||'#F97316';
+  catChip.innerHTML = `<i class="fas ${cat.icon||'fa-layer-group'}"></i> ${cat.name}`;
+  const subChip = document.getElementById('pkg-subcat-chip');
+  if (sub) {
+    subChip.style.display = 'inline-flex';
+    subChip.innerHTML = `<i class="fas fa-tag"></i> ${sub.name}`;
+    currentSubcatData = sub;
+  } else {
+    subChip.style.display = 'none';
+    currentSubcatData = null;
+  }
+}
+
+// ── PACKAGES ──────────────────────────────────────────────────
+function renderPackages() {
+  const el = document.getElementById('existing-packages');
+  const cat = allCategories.find(c=>c.id===leadData.tour_category_id);
+  const sub = cat?(cat.subcategories||[]).find(s=>s.id===leadData.tour_subcategory_id):null;
+  if (cat) renderPackageCategoryBanner(cat,sub);
+
+  if (!leadData.packages||!leadData.packages.length) {
+    el.innerHTML='<div style="color:var(--text3);font-size:13px;text-align:center;padding:20px">No packages created yet</div>';
+    return;
+  }
+  el.innerHTML = leadData.packages.map(p=>`
+    <div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-weight:600">${p.tour_name}</div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-sm btn-secondary" onclick="loadPackageForEdit(${p.id})"><i class="fas fa-edit"></i></button>
+          <button class="btn btn-sm btn-secondary" onclick="sharePackageWhatsApp(${p.id})" style="color:#25D366"><i class="fab fa-whatsapp"></i></button>
+          <button class="btn btn-sm btn-primary" onclick="usePackageForBooking(${p.id})"><i class="fas fa-ticket"></i> Book</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:16px;margin-top:8px;font-size:12px;color:var(--text3)">
+        <span>Base: <strong style="color:var(--text)">${formatCurrency(p.base_price)}</strong></span>
+        <span>Discount: <strong style="color:var(--red)">-${formatCurrency(p.discount)}</strong></span>
+        <span>Final: <strong style="color:var(--green);font-size:14px">${formatCurrency(p.final_price)}</strong></span>
+      </div>
+    </div>`).join('');
+}
+
+// ── PACKAGE INIT + QUICK FILL ─────────────────────────────────
+function initPackage() {
+  currentPkgId=null; itineraryDays=[]; hotels=[]; otherCharges=[];
+  document.getElementById('pkg_name').value = leadData.tour_name||'';
+  // ✅ Set vehicle from lead data, using the centralised select
+  document.getElementById('pkg_vehicle').value = leadData.vehicle_type||'Sedan';
+  document.getElementById('pkg_transport_cost').value='';
+  document.getElementById('pkg_discount').value='0';
+  document.getElementById('pkg_notes').value='';
+  document.getElementById('itinerary-days').innerHTML='';
+  document.getElementById('hotel-list').innerHTML='';
+  document.getElementById('charges-list').innerHTML='';
+  document.getElementById('package-form').style.display='block';
+  updateQuickFillBar(); recalcTotal();
+}
+
+function updateQuickFillBar() {
+  const bar = document.getElementById('pkg-quick-fill-bar');
+  if (currentSubcatData) {
+    bar.style.display='flex';
+    document.getElementById('pkg-quick-fill-name').textContent = currentSubcatData.name;
+  } else {
+    bar.style.display='none';
+  }
+}
+
+function quickFillFromSubcat() {
+  if (!currentSubcatData) return;
+  const s = currentSubcatData;
+  const dur = s.duration_days ? ` ${s.duration_nights}N${s.duration_days}D` : '';
+  document.getElementById('pkg_name').value = s.name + dur;
+  if (s.duration_days > 0) {
+    document.getElementById('itinerary-days').innerHTML=''; itineraryDays=[];
+    for (let i=0;i<s.duration_days;i++) addItineraryDay();
+  }
+  let notes = '';
+  if (s.description) notes += s.description + '\n';
+  if (s.tags) notes += 'Destinations: ' + s.tags;
+  document.getElementById('pkg_notes').value = notes.trim();
+  if (s.starting_price && hotels.length===0) {
+    document.getElementById('pkg_transport_cost').value = s.starting_price;
+    recalcTotal();
+  }
+  toast(`Quick filled from "${s.name}"!`, 'success');
+}
+
+// ── EDIT MODAL ────────────────────────────────────────────────
+async function openEditModal() {
+  const l = leadData;
+  document.getElementById('edit-name').value = l.customer_name;
+  document.getElementById('edit-mobile').value = l.mobile;
+  document.getElementById('edit-alt-mobile').value = l.alt_mobile||'';
+  document.getElementById('edit-city').value = l.city||'';
+  document.getElementById('edit-tour').value = l.tour_name||'';
+  document.getElementById('edit-travel-date').value = l.travel_date||'';
+  document.getElementById('edit-status').value = l.status;
+  // ✅ Set hotel category and vehicle type
+  document.getElementById('edit-hotel-category').value = l.hotel_category||'Standard';
+  document.getElementById('edit-vehicle-type').value = l.vehicle_type||'Sedan';
+  await populateCategoryDropdown(l.tour_category_id, l.tour_subcategory_id);
+  const user = getUser();
+  if (user&&(user.role==='admin'||user.role==='manager')) {
+    document.getElementById('edit-assign-row').style.display='block';
+    loadStaffForEdit();
+  }
+  document.getElementById('edit-modal').classList.add('show');
+}
+
+async function populateCategoryDropdown(selCatId, selSubId) {
+  const catSel = document.getElementById('edit-tour-category');
+  catSel.innerHTML = '<option value="">— Select Category —</option>';
+  if (!allCategories.length) allCategories = await apiFetch('/api/tour-categories')||[];
+  allCategories.forEach(c => {
+    const o = document.createElement('option');
+    o.value=c.id; o.textContent=c.name;
+    if (c.id===selCatId) o.selected=true;
+    catSel.appendChild(o);
+  });
+  populateSubcategoryDropdown(selCatId, selSubId);
+}
+
+function populateSubcategoryDropdown(catId, selSubId) {
+  const subSel = document.getElementById('edit-tour-subcategory');
+  subSel.innerHTML = '<option value="">— Select Sub-Category —</option>';
+  document.getElementById('subcat-preview').style.display='none';
+  if (!catId) return;
+  const cat = allCategories.find(c=>c.id==catId);
+  if (!cat||!cat.subcategories) return;
+  cat.subcategories.filter(s=>s.is_active).forEach(s => {
+    const o = document.createElement('option');
+    o.value = s.id;
+    const dur = s.duration_days?` (${s.duration_nights}N/${s.duration_days}D)`:'';
+    const price = s.starting_price?` — ₹${Number(s.starting_price).toLocaleString('en-IN')}+`:'';
+    o.textContent = s.name + dur + price;
+    if (s.id===selSubId) o.selected=true;
+    subSel.appendChild(o);
+  });
+  if (selSubId) showSubcatPreview(catId, selSubId);
+}
+
+function onEditCategoryChange() {
+  const catId = parseInt(document.getElementById('edit-tour-category').value)||null;
+  populateSubcategoryDropdown(catId, null);
+  if (catId) {
+    const cat = allCategories.find(c=>c.id===catId);
+    if (cat && !document.getElementById('edit-tour').value.trim()) {
+      document.getElementById('edit-tour').value = cat.name;
+    }
+  }
+}
+
+function onEditSubcategoryChange() {
+  const catId = parseInt(document.getElementById('edit-tour-category').value)||null;
+  const subId = parseInt(document.getElementById('edit-tour-subcategory').value)||null;
+  showSubcatPreview(catId, subId);
+  if (subId && catId) {
+    const cat = allCategories.find(c=>c.id===catId);
+    const sub = cat?(cat.subcategories||[]).find(s=>s.id===subId):null;
+    if (sub) {
+      const dur = sub.duration_days?` ${sub.duration_nights}N${sub.duration_days}D`:'';
+      document.getElementById('edit-tour').value = sub.name + dur;
+    }
+  }
+}
+
+function showSubcatPreview(catId, subId) {
+  const preview = document.getElementById('subcat-preview');
+  if (!catId||!subId) { preview.style.display='none'; return; }
+  const cat = allCategories.find(c=>c.id==catId);
+  const sub = cat?(cat.subcategories||[]).find(s=>s.id==subId):null;
+  if (!sub) { preview.style.display='none'; return; }
+  preview.style.display='block';
+  document.getElementById('preview-duration').textContent = sub.duration_days?`⏱ ${sub.duration_nights}N / ${sub.duration_days}D`:'';
+  document.getElementById('preview-price').textContent = sub.starting_price?`₹${Number(sub.starting_price).toLocaleString('en-IN')}+ starting`:'';
+  document.getElementById('preview-tags').textContent = sub.tags?`📍 ${sub.tags}`:'';
+  document.getElementById('preview-desc').textContent = sub.description||'';
+}
+
+async function loadStaffForEdit() {
+  const users = await apiFetch('/api/users'); if(!users) return;
+  const sel = document.getElementById('edit-assigned'); sel.innerHTML='';
+  users.filter(u=>u.role==='staff'&&u.is_active).forEach(u=>{
+    sel.innerHTML+=`<option value="${u.id}" ${u.id===leadData.assigned_to?'selected':''}>${u.full_name}</option>`;
+  });
+}
+
+async function saveEdit() {
+  const payload = {
+    customer_name: document.getElementById('edit-name').value,
+    mobile: document.getElementById('edit-mobile').value,
+    alt_mobile: document.getElementById('edit-alt-mobile').value,
+    city: document.getElementById('edit-city').value,
+    tour_name: document.getElementById('edit-tour').value,
+    travel_date: document.getElementById('edit-travel-date').value||null,
+    status: document.getElementById('edit-status').value,
+    // ✅ Include updated hotel category and vehicle type
+    hotel_category: document.getElementById('edit-hotel-category').value,
+    vehicle_type: document.getElementById('edit-vehicle-type').value,
+    tour_category_id: parseInt(document.getElementById('edit-tour-category').value)||null,
+    tour_subcategory_id: parseInt(document.getElementById('edit-tour-subcategory').value)||null
+  };
+  const assigned = document.getElementById('edit-assigned').value;
+  if (assigned) payload.assigned_to = parseInt(assigned);
+  await apiFetch(`/api/leads/${LEAD_ID}`,{method:'PUT',body:JSON.stringify(payload)});
+  closeModal('edit-modal'); toast('Lead updated!','success'); await loadLead();
+}
+
+// ── CONVERSATIONS ─────────────────────────────────────────────
+function renderTimeline() {
+  const el = document.getElementById('timeline-list');
+  if (!leadData.conversations||!leadData.conversations.length) {
+    el.innerHTML='<div class="empty-state"><i class="fas fa-comments"></i><h3>No conversations yet</h3><p>Add the first conversation update above</p></div>';return;
+  }
+  el.innerHTML=`<div class="timeline">`+leadData.conversations.map(c=>{
+    const color=RESULT_COLORS[c.call_result]||'purple';
+    const icon=RESULT_ICONS[c.call_result]||'fa-comment';
+    const dur=c.call_duration?`<span style="background:rgba(99,102,241,.1);color:var(--blue);font-size:10px;padding:2px 6px;border-radius:10px"><i class="fas fa-clock"></i> ${c.call_duration} min</span>`:'';
+    return `<div class="timeline-item"><div class="timeline-dot ${color}"><i class="fas ${icon}" style="font-size:10px"></i></div><div class="timeline-content"><div class="timeline-meta"><span class="timeline-date">${formatDate(c.created_at)}</span><span class="timeline-staff">${c.staff_name}</span>${dur}<span class="badge badge-${color==='red'?'lost':color==='green'?'booked':color==='yellow'?'followup':'new'}" style="font-size:10px;margin-left:auto">${c.call_result}</span></div>${c.summary?`<div style="color:var(--text);font-size:13px;margin-top:4px">${c.summary}</div>`:''} ${c.next_followup_date?`<div style="color:var(--text3);font-size:11px;margin-top:6px"><i class="fas fa-calendar-check" style="color:var(--yellow)"></i> Next follow-up: ${formatDate(c.next_followup_date)}</div>`:''}<div style="color:var(--text3);font-size:10px;margin-top:4px">${c.call_type} · ${timeAgo(c.created_at)}</div></div></div>`;
+  }).join('')+`</div>`;
+}
+
+async function addConversation() {
+  const result=document.getElementById('call_result').value;
+  if(!result){toast('Please select a call result','error');return;}
+  const payload={call_type:document.getElementById('call_type').value,call_result:result,call_duration:parseInt(document.getElementById('call_duration').value)||null,summary:document.getElementById('conv_summary').value.trim(),next_followup_date:document.getElementById('next_followup_date').value||null,status_update:document.getElementById('status_update').value||null};
+  try{
+    await apiFetch(`/api/leads/${LEAD_ID}/conversations`,{method:'POST',body:JSON.stringify(payload)});
+    toast('Conversation saved!','success');
+    ['call_result','conv_summary','call_duration','next_followup_date','status_update'].forEach(id=>document.getElementById(id).value='');
+    if(document.getElementById('send_whatsapp_after').checked){await loadLead();switchTab('whatsapp');applyWATemplate('followup');}
+    else await loadLead();
+  }catch(e){toast(e.message,'error');}
+}
+
+// ── PACKAGE BUILDER ───────────────────────────────────────────
+function addItineraryDay(){
+  const idx=itineraryDays.length; itineraryDays.push({day:idx+1,description:''});
+  const div=document.createElement('div');
+  div.style.cssText='display:flex;gap:8px;margin-bottom:8px;align-items:flex-start';
+  div.innerHTML=`<div style="padding:6px 10px;background:var(--accent);color:#fff;border-radius:6px;font-size:12px;font-weight:700;white-space:nowrap;margin-top:2px">Day ${idx+1}</div><input type="text" class="form-control" placeholder="e.g., Arrive Prayagraj, local sightseeing" oninput="itineraryDays[${idx}].description=this.value"><button class="btn btn-danger btn-sm" onclick="this.parentElement.remove();itineraryDays.splice(${idx},1)"><i class="fas fa-trash"></i></button>`;
+  document.getElementById('itinerary-days').appendChild(div);
+}
+
+// ✅ UPDATED addHotel: now includes Hotel Category dropdown with new options
+function addHotel(){
+  const idx=hotels.length; hotels.push({city:'',name:'',category:'Standard',nights:1,price:0});
+  const div=document.createElement('div');
+  div.style.cssText='display:grid;grid-template-columns:1fr 1fr 120px 60px 100px 36px;gap:6px;margin-bottom:8px;align-items:end';
+  div.innerHTML=`
+    <div class="form-group" style="margin:0"><label style="font-size:10px">City</label><input type="text" class="form-control" placeholder="City" oninput="hotels[${idx}].city=this.value"></div>
+    <div class="form-group" style="margin:0"><label style="font-size:10px">Hotel Name</label><input type="text" class="form-control" placeholder="Hotel name" oninput="hotels[${idx}].name=this.value"></div>
+    <div class="form-group" style="margin:0">
+      <label style="font-size:10px">Category</label>
+      <select class="form-control" onchange="hotels[${idx}].category=this.value">
+        ${buildHotelCategoryOptions('Standard')}
+      </select>
+    </div>
+    <div class="form-group" style="margin:0"><label style="font-size:10px">Nights</label><input type="number" class="form-control" value="1" min="1" oninput="hotels[${idx}].nights=parseInt(this.value)||1;recalcTotal()"></div>
+    <div class="form-group" style="margin:0"><label style="font-size:10px">Price/Night (₹)</label><input type="number" class="form-control" placeholder="0" oninput="hotels[${idx}].price=parseInt(this.value)||0;recalcTotal()"></div>
+    <button class="btn btn-danger btn-sm" onclick="this.parentElement.remove();hotels.splice(${idx},1);recalcTotal()"><i class="fas fa-trash"></i></button>`;
+  document.getElementById('hotel-list').appendChild(div);
+}
+
+function addCharge(){
+  const idx=otherCharges.length; otherCharges.push({name:'',amount:0});
+  const div=document.createElement('div');
+  div.style.cssText='display:flex;gap:8px;margin-bottom:8px;align-items:end';
+  div.innerHTML=`<div class="form-group" style="flex:1;margin:0"><input type="text" class="form-control" placeholder="Charge name" oninput="otherCharges[${idx}].name=this.value"></div><div class="form-group" style="width:120px;margin:0"><input type="number" class="form-control" placeholder="₹ Amount" oninput="otherCharges[${idx}].amount=parseInt(this.value)||0;recalcTotal()"></div><button class="btn btn-danger btn-sm" onclick="this.parentElement.remove();otherCharges.splice(${idx},1);recalcTotal()"><i class="fas fa-trash"></i></button>`;
+  document.getElementById('charges-list').appendChild(div);
+}
+
+function recalcTotal(){
+  const hotelTotal=hotels.reduce((s,h)=>s+(h.price*h.nights),0);
+  const transport=parseInt(document.getElementById('pkg_transport_cost')?.value)||0;
+  const charges=otherCharges.reduce((s,c)=>s+c.amount,0);
+  const base=hotelTotal+transport+charges;
+  const discount=parseInt(document.getElementById('pkg_discount')?.value)||0;
+  document.getElementById('pkg_hotel_total').value=hotelTotal;
+  document.getElementById('pkg_base').value=base;
+  document.getElementById('pkg_final').value=base-discount;
+}
+
+async function savePackage(){
+  const payload={tour_name:document.getElementById('pkg_name').value,itinerary:itineraryDays,hotels,transport:{type:document.getElementById('pkg_vehicle').value,price:parseInt(document.getElementById('pkg_transport_cost').value)||0},other_charges:otherCharges,base_price:parseInt(document.getElementById('pkg_base').value)||0,discount:parseInt(document.getElementById('pkg_discount').value)||0,final_price:parseInt(document.getElementById('pkg_final').value)||0,notes:document.getElementById('pkg_notes').value,tour_category_id:leadData.tour_category_id||null,tour_subcategory_id:leadData.tour_subcategory_id||null};
+  const url=currentPkgId?`/api/packages/${currentPkgId}`:`/api/leads/${LEAD_ID}/packages`;
+  await apiFetch(url,{method:currentPkgId?'PUT':'POST',body:JSON.stringify(payload)});
+  document.getElementById('package-form').style.display='none';
+  toast('Package saved!','success'); await loadLead();
+}
+
+async function loadPackageForEdit(pkgId){
+  const p=await apiFetch(`/api/packages/${pkgId}`); if(!p) return;
+  currentPkgId=pkgId;
+  document.getElementById('pkg_name').value=p.tour_name||'';
+  itineraryDays=p.itinerary||[]; hotels=p.hotels||[]; otherCharges=p.other_charges||[];
+  document.getElementById('pkg_transport_cost').value=p.transport?.price||0;
+  document.getElementById('pkg_vehicle').value=p.transport?.type||'Sedan';
+  document.getElementById('pkg_discount').value=p.discount||0;
+  document.getElementById('pkg_notes').value=p.notes||'';
+  document.getElementById('itinerary-days').innerHTML=''; itineraryDays.forEach(()=>addItineraryDay());
+  document.getElementById('hotel-list').innerHTML=''; hotels.forEach(()=>addHotel());
+  document.getElementById('package-form').style.display='block';
+  updateQuickFillBar(); recalcTotal(); switchTab('package');
+}
+
+function usePackageForBooking(pkgId){
+  const pkg=leadData.packages.find(p=>p.id===pkgId); if(!pkg) return;
+  switchTab('booking');
+  document.getElementById('bk_total').value=pkg.final_price;
+  document.getElementById('bk_discount').value=0;
+  document.getElementById('bk_final').value=pkg.final_price;
+  calcBalance();
+}
+
+// ── BOOKING ───────────────────────────────────────────────────
+function renderBooking(){
+  document.getElementById('bk_payment_date').value=new Date().toISOString().split('T')[0];
+  const b=leadData.booking; const existing=document.getElementById('existing-booking');
+  if(b){
+    document.getElementById('booking-warning').style.display='flex';
+    existing.innerHTML=`<div class="card" style="margin-bottom:16px;border-color:var(--green)"><div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><i class="fas fa-check-circle" style="color:var(--green);font-size:20px"></i><div><div style="font-weight:700;color:var(--green)">BOOKED</div><code style="color:var(--text3);font-size:11px">${b.booking_id}</code></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px"><div>Total: <strong>${formatCurrency(b.total_amount)}</strong></div><div>Discount: <strong style="color:var(--red)">-${formatCurrency(b.discount)}</strong></div><div>Final: <strong style="color:var(--green)">${formatCurrency(b.final_amount)}</strong></div><div>Advance: <strong>${formatCurrency(b.advance_paid)}</strong></div><div>Balance: <strong style="color:${b.balance>0?'var(--red)':'var(--green)'}">${formatCurrency(b.balance)}</strong></div><div>Method: <strong>${b.payment_method}</strong></div></div></div>`;
+  }
+}
+
+function calcBalance(){
+  const total=parseInt(document.getElementById('bk_total').value)||0;
+  const discount=parseInt(document.getElementById('bk_discount').value)||0;
+  const advance=parseInt(document.getElementById('bk_advance').value)||0;
+  document.getElementById('bk_final').value=total-discount;
+  document.getElementById('bk_balance').value=(total-discount)-advance;
+}
+
+async function createBooking(){
+  const total=parseInt(document.getElementById('bk_total').value)||0;
+  if(!total){toast('Please enter total amount','error');return;}
+  const payload={total_amount:total,discount:parseInt(document.getElementById('bk_discount').value)||0,final_amount:parseInt(document.getElementById('bk_final').value)||0,advance_paid:parseInt(document.getElementById('bk_advance').value)||0,balance:parseInt(document.getElementById('bk_balance').value)||0,payment_method:document.getElementById('bk_payment_method').value,payment_date:document.getElementById('bk_payment_date').value,notes:document.getElementById('bk_notes').value};
+  try{const res=await apiFetch(`/api/leads/${LEAD_ID}/book`,{method:'POST',body:JSON.stringify(payload)});toast(`Booking ${res.booking_id} confirmed!`,'success');await loadLead();switchTab('payments');}catch(e){toast(e.message,'error');}
+}
+
+// ── PAYMENTS ──────────────────────────────────────────────────
+function renderPayments(){
+  document.getElementById('pay_date').value=new Date().toISOString().split('T')[0];
+  const b=leadData.booking;
+  const summaryEl=document.getElementById('payment-summary-card');
+  const histEl=document.getElementById('payment-history-list');
+  if(!b){summaryEl.innerHTML='';document.getElementById('add-payment-card').style.display='none';histEl.innerHTML='<div style="color:var(--text3);text-align:center;padding:20px;font-size:13px">No booking found. Create a booking first.</div>';return;}
+  document.getElementById('add-payment-card').style.display='block';
+  const pct=b.final_amount>0?Math.min(100,Math.round((b.advance_paid/b.final_amount)*100)):0;
+  const barColor=b.balance<=0?'var(--green)':b.balance<b.final_amount*0.5?'var(--yellow)':'var(--red)';
+  summaryEl.innerHTML=`<div class="card" style="margin-bottom:16px;border-color:${b.balance<=0?'var(--green)':'var(--border)'}"><div style="display:flex;justify-content:space-between;margin-bottom:10px"><div><div style="font-size:12px;color:var(--text3)">Total Amount</div><div style="font-size:20px;font-weight:700">${formatCurrency(b.final_amount)}</div></div><div style="text-align:right"><div style="font-size:12px;color:var(--text3)">Balance Due</div><div style="font-size:20px;font-weight:700;color:${b.balance>0?'var(--red)':'var(--green)'}">${b.balance<=0?'✓ Paid':formatCurrency(b.balance)}</div></div></div><div style="background:var(--surface2);border-radius:6px;height:10px;overflow:hidden;margin-bottom:6px"><div style="width:${pct}%;height:100%;background:${barColor};border-radius:6px;transition:width .6s ease"></div></div><div style="font-size:11px;color:var(--text3)">${pct}% paid · Advance: ${formatCurrency(b.advance_paid)}</div></div>`;
+  const payments=leadData.payments||[];
+  histEl.innerHTML=!payments.length?'<div style="color:var(--text3);text-align:center;padding:20px;font-size:13px">No payment records yet</div>':payments.map(p=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)"><div><div style="font-weight:600;color:var(--green)">${formatCurrency(p.amount)}</div><div style="font-size:11px;color:var(--text3)">${p.payment_method} · ${formatDate(p.payment_date)}${p.reference_no?' · Ref: '+p.reference_no:''}</div>${p.notes?`<div style="font-size:11px;color:var(--text3)">${p.notes}</div>`:''}</div><i class="fas fa-check-circle" style="color:var(--green)"></i></div>`).join('');
+}
+
+async function addPayment(){
+  const b=leadData.booking; if(!b){toast('No booking found','error');return;}
+  const amount=parseFloat(document.getElementById('pay_amount').value);
+  if(!amount||amount<=0){toast('Enter valid amount','error');return;}
+  try{await apiFetch(`/api/bookings/${b.id}/payment`,{method:'POST',body:JSON.stringify({amount,payment_method:document.getElementById('pay_method').value,payment_date:document.getElementById('pay_date').value,reference_no:document.getElementById('pay_ref').value,notes:document.getElementById('pay_notes').value})});
+  toast('Payment recorded!','success');['pay_amount','pay_ref','pay_notes'].forEach(id=>document.getElementById(id).value='');await loadLead();switchTab('payments');}catch(e){toast(e.message,'error');}
+}
+
+// ── WHATSAPP ──────────────────────────────────────────────────
+function renderWhatsAppLog(){
+  const el=document.getElementById('whatsapp-log-list');
+  const msgs=leadData.whatsapp_logs||[];
+  if(!msgs.length){el.innerHTML='<div style="color:var(--text3);text-align:center;padding:20px;font-size:13px">No messages logged yet</div>';return;}
+  el.innerHTML=msgs.map(m=>`<div style="padding:10px 0;border-bottom:1px solid var(--border)"><div style="background:var(--surface2);border-radius:8px;padding:8px 12px;max-width:90%;font-size:13px;white-space:pre-wrap">${m.message}</div><div style="font-size:10px;color:var(--text3);margin-top:4px">${m.staff_name} · ${timeAgo(m.created_at)}</div></div>`).join('');
+}
+function applyWATemplate(key){const fn=WA_TEMPLATES[key];if(fn)document.getElementById('wa_message').value=fn();}
+function sendWhatsApp(){
+  const msg=document.getElementById('wa_message').value.trim();
+  if(!msg){toast('Please enter a message','error');return;}
+  window.open(`https://wa.me/91${leadData.mobile.replace(/\D/g,'')}?text=${encodeURIComponent(msg)}`,'_blank');
+  logWhatsApp();
+}
+async function logWhatsApp(){
+  const msg=document.getElementById('wa_message').value.trim();
+  if(!msg){toast('Please enter a message to log','error');return;}
+  try{await apiFetch(`/api/leads/${LEAD_ID}/whatsapp`,{method:'POST',body:JSON.stringify({message:msg})});toast('Message logged!','success');document.getElementById('wa_message').value='';await loadLead();switchTab('whatsapp');}catch(e){toast(e.message,'error');}
+}
+function sharePackageWhatsApp(pkgId){
+  const pkg = leadData.packages.find(p => p.id === pkgId);
+  if (!pkg) return;
+
+  // Parse hotels/transport if they came back as JSON strings
+  const hotels   = typeof pkg.hotels    === 'string' ? JSON.parse(pkg.hotels    || '[]') : (pkg.hotels    || []);
+  const transport = typeof pkg.transport === 'string' ? JSON.parse(pkg.transport || '{}') : (pkg.transport || {});
+  const charges   = typeof pkg.other_charges === 'string' ? JSON.parse(pkg.other_charges || '[]') : (pkg.other_charges || []);
+
+  // Hotel lines — city, name, category, nights × price = subtotal
+  const hotelLines = hotels.length
+    ? hotels.map(h => {
+        const nights    = parseInt(h.nights) || 1;
+        const perNight  = parseInt(h.price)  || 0;
+        const subtotal  = nights * perNight;
+        const catLabel  = h.category ? ` [${h.category}]` : '';
+        return `  • ${h.city}: ${h.name}${catLabel}\n` +
+               `    ${nights}N × ₹${perNight.toLocaleString('en-IN')} = ₹${subtotal.toLocaleString('en-IN')}`;
+      }).join('\n')
+    : '  (No hotels added)';
+
+  // Transport line
+  const transportCost = parseInt(transport.price) || 0;
+  const transportLine = transport.type
+    ? `  • ${transport.type}: ₹${transportCost.toLocaleString('en-IN')}`
+    : '  (No transport)';
+
+  // Other charges lines
+  const chargeLines = charges.length
+    ? charges.map(c => `  • ${c.name}: ₹${(parseInt(c.amount)||0).toLocaleString('en-IN')}`).join('\n')
+    : '';
+
+  // Price summary
+  const basePrice   = parseInt(pkg.base_price)  || 0;
+  const discount    = parseInt(pkg.discount)     || 0;
+  const finalPrice  = parseInt(pkg.final_price)  || 0;
+
+  document.getElementById('wa_message').value =
+    `🌟 *Tour Package: ${pkg.tour_name}*\n\n` +
+    `Dear ${leadData.customer_name}ji,\n\n` +
+
+    `🏨 *Hotels:*\n${hotelLines}\n\n` +
+
+    `🚗 *Transport:*\n${transportLine}\n` +
+
+    (chargeLines
+      ? `\n🧾 *Other Charges:*\n${chargeLines}\n`
+      : '') +
+
+    `\n━━━━━━━━━━━━━━━━\n` +
+    `📊 *Price Breakdown:*\n` +
+    `  Base Price : ₹${basePrice.toLocaleString('en-IN')}\n` +
+    (discount > 0
+      ? `  Discount   : -₹${discount.toLocaleString('en-IN')}\n`
+      : '') +
+    `  *Final Price: ₹${finalPrice.toLocaleString('en-IN')}*\n` +
+    `━━━━━━━━━━━━━━━━\n` +
+
+    (pkg.notes ? `\n📝 *Notes:*\n${pkg.notes}\n` : '') +
+
+    `\nPlease confirm your booking! 🙏\n📞 Contact us for any queries.`;
+
+  switchTab('whatsapp');
+}
+
+// ── LEAD SCORE ────────────────────────────────────────────────
+function renderLeadScore(){
+  const l=leadData; let score=0; const factors=[];
+  const ss={'New Lead':20,'Follow-up':40,'Negotiation':65,'Booked':100,'Lost':0};
+  score+=ss[l.status]||20; factors.push(`Status (${l.status})`);
+  if(l.travel_date){score+=10;factors.push('Travel date ✓');}
+  if(l.tour_category_id){score+=8;factors.push('Category assigned ✓');}
+  if(l.tour_subcategory_id){score+=5;factors.push('Sub-category ✓');}
+  const cc=(l.conversations||[]).length;
+  if(cc>0){score+=Math.min(15,cc*3);factors.push(`${cc} conversation(s)`);}
+  if((l.packages||[]).length>0){score+=10;factors.push('Package created ✓');}
+  if((l.conversations||[]).some(c=>c.call_result==='Interested'||c.call_result==='Package Sent')){score+=10;factors.push('Positive engagement ✓');}
+  if((l.followups||[]).some(f=>f.status==='Pending')){score+=5;factors.push('Follow-up scheduled ✓');}
+  score=Math.min(100,score);
+  const label=score>=80?'🔥 Hot':score>=50?'⚡ Warm':score>=30?'❄️ Cold':'💤 Inactive';
+  const color=score>=80?'var(--red)':score>=50?'var(--yellow)':score>=30?'var(--blue)':'var(--text3)';
+  const badge=document.getElementById('score-badge');
+  badge.textContent=`${score} – ${label}`; badge.style.color=color;
+  document.getElementById('score-bar').style.width=score+'%';
+  document.getElementById('score-bar').style.background=color;
+  document.getElementById('score-factors').textContent=factors.join(' · ');
+}
+
+// ── CALL STATS ────────────────────────────────────────────────
+function renderCallStats(){
+  const convs=leadData.conversations||[];
+  const total=convs.length;
+  const connected=convs.filter(c=>!['Not Connected','Call Not Picked'].includes(c.call_result)).length;
+  const totalDuration=convs.reduce((s,c)=>s+(parseInt(c.call_duration)||0),0);
+  const lastCall=convs[0];
+  document.getElementById('call-stats-content').innerHTML=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div style="background:var(--surface2);border-radius:8px;padding:10px;text-align:center"><div style="font-size:22px;font-weight:700;color:var(--accent)">${total}</div><div style="font-size:11px;color:var(--text3)">Total Calls</div></div><div style="background:var(--surface2);border-radius:8px;padding:10px;text-align:center"><div style="font-size:22px;font-weight:700;color:var(--green)">${connected}</div><div style="font-size:11px;color:var(--text3)">Connected</div></div><div style="background:var(--surface2);border-radius:8px;padding:10px;text-align:center"><div style="font-size:22px;font-weight:700;color:var(--blue)">${totalDuration}</div><div style="font-size:11px;color:var(--text3)">Total Mins</div></div><div style="background:var(--surface2);border-radius:8px;padding:10px;text-align:center"><div style="font-size:16px;font-weight:600;color:var(--text)">${lastCall?lastCall.call_result:'—'}</div><div style="font-size:11px;color:var(--text3)">Last Result</div></div></div>`;
+}
+
+// ── PINNED NOTES ──────────────────────────────────────────────
+function renderPinnedNotes(){
+  const notes=leadData.pinned_notes||[];const el=document.getElementById('pinned-notes-list');
+  if(!notes.length){el.innerHTML='<div style="color:var(--text3);font-size:12px;text-align:center;padding:10px">No pinned notes</div>';return;}
+  const C={yellow:'#F59E0B',blue:'#3B82F6',green:'#10B981',red:'#EF4444'};
+  el.innerHTML=notes.map(n=>`<div style="display:flex;gap:8px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--border)"><div style="width:4px;min-height:36px;border-radius:4px;background:${C[n.color]||C.yellow};flex-shrink:0"></div><div style="flex:1;font-size:12px">${n.note}</div><button class="btn btn-sm" style="padding:2px 6px;font-size:10px;color:var(--text3)" onclick="deleteNote(${n.id})"><i class="fas fa-times"></i></button></div>`).join('');
+}
+function openAddNoteModal(){document.getElementById('note-text').value='';selectNoteColor('yellow');document.getElementById('note-modal').classList.add('show');}
+function selectNoteColor(color){selectedNoteColor=color;['yellow','blue','green','red'].forEach(c=>{const el=document.getElementById('nc-'+c);if(el)el.querySelector('i').style.display=(c===color)?'block':'none';});}
+async function saveNote(){
+  const note=document.getElementById('note-text').value.trim();if(!note){toast('Please enter a note','error');return;}
+  try{await apiFetch(`/api/leads/${LEAD_ID}/notes`,{method:'POST',body:JSON.stringify({note,color:selectedNoteColor})});toast('Note pinned!','success');closeModal('note-modal');await loadLead();}catch(e){toast(e.message,'error');}
+}
+async function deleteNote(noteId){
+  if(!confirm('Delete this note?')) return;
+  try{await apiFetch(`/api/notes/${noteId}`,{method:'DELETE'});toast('Note deleted','success');await loadLead();}catch(e){toast(e.message,'error');}
+}
+
+// ── DUPLICATE ─────────────────────────────────────────────────
+async function duplicateLead(){
+  if(!confirm('Duplicate this lead?')) return;
+  const l=leadData;
+  const payload={customer_name:l.customer_name,mobile:l.mobile,alt_mobile:l.alt_mobile,email:l.email,city:l.city,tour_name:l.tour_name,travel_date:l.travel_date,adults:l.adults,children:l.children,hotel_category:l.hotel_category,meal_plan:l.meal_plan,vehicle_type:l.vehicle_type,lead_source:l.lead_source,assigned_to:l.assigned_to,status:'New Lead',notes:`Duplicated from ${l.lead_id}`,tour_category_id:l.tour_category_id,tour_subcategory_id:l.tour_subcategory_id};
+  try{const res=await apiFetch('/api/leads',{method:'POST',body:JSON.stringify(payload)});toast(`Lead duplicated! New ID: ${res.lead_id}`,'success');setTimeout(()=>window.location.href=`/leads/${res.id}`,1200);}catch(e){toast(e.message,'error');}
+}
+
+// ── HISTORY & FOLLOWUPS ───────────────────────────────────────
+function renderHistory(){
+  const el=document.getElementById('history-list');
+  if(!leadData.history||!leadData.history.length){el.innerHTML='<div class="empty-state"><i class="fas fa-history"></i><h3>No previous records</h3><p>First enquiry for this mobile number</p></div>';return;}
+  el.innerHTML=leadData.history.map(h=>`<a href="/leads/${h.id}" style="display:block;padding:12px;border-bottom:1px solid var(--border);text-decoration:none;color:var(--text)"><div style="display:flex;justify-content:space-between;align-items:center"><div><code style="color:var(--accent);font-size:11px">${h.lead_id}</code><div style="font-size:13px;margin-top:2px">${h.tour_name||'No tour specified'}</div></div><div style="text-align:right">${statusBadge(h.status)}<div style="font-size:11px;color:var(--text3);margin-top:4px">${formatDate(h.created_at)}</div></div></div></a>`).join('');
+}
+function renderFollowups(){
+  const el=document.getElementById('upcoming-followups');
+  const pending=(leadData.followups||[]).filter(f=>f.status==='Pending');
+  if(!pending.length){el.innerHTML='<div style="color:var(--text3);font-size:12px;text-align:center;padding:12px">No upcoming follow-ups</div>';return;}
+  el.innerHTML=pending.map(f=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)"><div><div style="font-size:12px;font-weight:600">${formatDate(f.followup_date)}</div><div style="font-size:11px;color:var(--text3)">${f.notes||''}</div></div><button class="btn btn-sm btn-success" onclick="completeFollowup(${f.id})"><i class="fas fa-check"></i></button></div>`).join('');
+}
+async function completeFollowup(id){await apiFetch(`/api/followups/${id}/complete`,{method:'POST'});toast('Follow-up completed','success');await loadLead();}
+
+function closeModal(id){document.getElementById(id).classList.remove('show');}
+function switchTab(name){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('[id^="tab-"]').forEach(t=>t.style.display='none');
+  document.getElementById(`tab-${name}`).style.display='block';
+  const map={timeline:'time',package:'pack',booking:'book',payments:'pay',whatsapp:'what',history:'hist'};
+  const kw=map[name]||name.substring(0,4);
+  document.querySelectorAll('.tab').forEach(t=>{if(t.textContent.toLowerCase().includes(kw)||t.innerHTML.toLowerCase().includes(name))t.classList.add('active');});
+}
+
+loadLead();
+</script>
+{% endblock %}

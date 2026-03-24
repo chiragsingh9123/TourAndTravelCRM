@@ -1,0 +1,469 @@
+{% extends "base.html" %}
+{% block title %}Tour Categories — Travel CRM{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1><i class="fas fa-layer-group"></i> Tour Categories</h1>
+    <p style="color:var(--text3); font-size:13px; margin-top:4px">Manage tour types, sub-categories and packages under each category</p>
+  </div>
+  <div class="page-header-actions">
+    <button class="btn btn-primary" onclick="openCategoryModal()">
+      <i class="fas fa-plus"></i> Add Category
+    </button>
+  </div>
+</div>
+
+<!-- Stats Row -->
+<div style="display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px" id="cat-stats">
+  <div class="card stat-card">
+    <div class="stat-icon" style="background:rgba(249,115,22,.1); color:var(--accent)"><i class="fas fa-layer-group"></i></div>
+    <div><div class="stat-value" id="stat-total-cats">—</div><div class="stat-label">Total Categories</div></div>
+  </div>
+  <div class="card stat-card">
+    <div class="stat-icon" style="background:rgba(16,185,129,.1); color:var(--green)"><i class="fas fa-check-circle"></i></div>
+    <div><div class="stat-value" id="stat-active-cats">—</div><div class="stat-label">Active</div></div>
+  </div>
+  <div class="card stat-card">
+    <div class="stat-icon" style="background:rgba(59,130,246,.1); color:var(--blue)"><i class="fas fa-tags"></i></div>
+    <div><div class="stat-value" id="stat-total-subcats">—</div><div class="stat-label">Sub-Categories</div></div>
+  </div>
+  <div class="card stat-card">
+    <div class="stat-icon" style="background:rgba(139,92,246,.1); color:#8B5CF6"><i class="fas fa-map-marked-alt"></i></div>
+    <div><div class="stat-value" id="stat-total-leads">—</div><div class="stat-label">Leads Linked</div></div>
+  </div>
+</div>
+
+<!-- Categories Grid -->
+<div id="categories-grid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:20px">
+  <div class="loading"><div class="spinner"></div> Loading categories...</div>
+</div>
+
+<!-- ── Category Modal ─────────────────────────────────────── -->
+<div class="modal-overlay" id="cat-modal">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header">
+      <div class="modal-title" id="cat-modal-title"><i class="fas fa-layer-group"></i> Add Category</div>
+      <button class="modal-close" onclick="closeModal('cat-modal')">&times;</button>
+    </div>
+
+    <div class="form-grid" style="grid-template-columns:1fr 1fr">
+      <div class="form-group" style="grid-column:span 2">
+        <label>Category Name *</label>
+        <input type="text" class="form-control" id="cat-name" placeholder="e.g., Nepal Tour Package">
+      </div>
+      <div class="form-group" style="grid-column:span 2">
+        <label>Description</label>
+        <textarea class="form-control" id="cat-desc" rows="2" placeholder="Brief description of this category..."></textarea>
+      </div>
+      <div class="form-group">
+        <label>Icon (Font Awesome class)</label>
+        <input type="text" class="form-control" id="cat-icon" placeholder="fa-mountain" oninput="previewIcon(this.value)">
+      </div>
+      <div class="form-group">
+        <label>Color Theme</label>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:6px" id="color-picker">
+          <span class="color-dot" data-color="#F97316" style="background:#F97316" onclick="selectColor('#F97316')"></span>
+          <span class="color-dot" data-color="#10B981" style="background:#10B981" onclick="selectColor('#10B981')"></span>
+          <span class="color-dot" data-color="#3B82F6" style="background:#3B82F6" onclick="selectColor('#3B82F6')"></span>
+          <span class="color-dot" data-color="#8B5CF6" style="background:#8B5CF6" onclick="selectColor('#8B5CF6')"></span>
+          <span class="color-dot" data-color="#EC4899" style="background:#EC4899" onclick="selectColor('#EC4899')"></span>
+          <span class="color-dot" data-color="#EF4444" style="background:#EF4444" onclick="selectColor('#EF4444')"></span>
+          <span class="color-dot" data-color="#14B8A6" style="background:#14B8A6" onclick="selectColor('#14B8A6')"></span>
+          <span class="color-dot" data-color="#F59E0B" style="background:#F59E0B" onclick="selectColor('#F59E0B')"></span>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Sort Order</label>
+        <input type="number" class="form-control" id="cat-sort" value="0" min="0">
+      </div>
+      <div class="form-group" style="display:flex; align-items:flex-end">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; margin-bottom:0">
+          <input type="checkbox" id="cat-active" checked style="width:16px;height:16px">
+          <span>Active</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Icon Preview -->
+    <div id="icon-preview" style="display:none; background:var(--surface2); border-radius:10px; padding:14px; margin-top:4px; text-align:center">
+      <i id="icon-preview-el" class="fas fa-layer-group" style="font-size:28px; color:var(--accent)"></i>
+      <div style="font-size:11px; color:var(--text3); margin-top:4px">Preview</div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('cat-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveCategory()"><i class="fas fa-save"></i> Save Category</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Sub-Category Modal ──────────────────────────────────── -->
+<div class="modal-overlay" id="subcat-modal">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <div class="modal-title" id="subcat-modal-title"><i class="fas fa-tag"></i> Add Sub-Category</div>
+      <button class="modal-close" onclick="closeModal('subcat-modal')">&times;</button>
+    </div>
+
+    <input type="hidden" id="subcat-parent-id">
+    <input type="hidden" id="subcat-edit-id">
+
+    <div class="form-grid">
+      <div class="form-group" style="grid-column:span 2">
+        <label>Sub-Category Name *</label>
+        <input type="text" class="form-control" id="subcat-name" placeholder="e.g., Kathmandu 5N6D">
+      </div>
+      <div class="form-group" style="grid-column:span 2">
+        <label>Description</label>
+        <textarea class="form-control" id="subcat-desc" rows="2" placeholder="Tour details, highlights..."></textarea>
+      </div>
+      <div class="form-group">
+        <label>Duration (Days)</label>
+        <input type="number" class="form-control" id="subcat-days" min="1" placeholder="e.g., 6">
+      </div>
+      <div class="form-group">
+        <label>Duration (Nights)</label>
+        <input type="number" class="form-control" id="subcat-nights" min="0" placeholder="e.g., 5">
+      </div>
+      <div class="form-group">
+        <label>Starting Price (₹)</label>
+        <input type="number" class="form-control" id="subcat-price" placeholder="e.g., 12000">
+      </div>
+      <div class="form-group">
+        <label>Sort Order</label>
+        <input type="number" class="form-control" id="subcat-sort" value="0" min="0">
+      </div>
+      <div class="form-group" style="grid-column:span 2">
+        <label>Popular Destinations / Tags</label>
+        <input type="text" class="form-control" id="subcat-tags" placeholder="Kathmandu, Pokhara, Chitwan (comma separated)">
+      </div>
+      <div class="form-group" style="display:flex; align-items:flex-end">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; margin-bottom:0">
+          <input type="checkbox" id="subcat-active" checked style="width:16px;height:16px">
+          <span>Active</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('subcat-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveSubCategory()"><i class="fas fa-save"></i> Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── View Leads Modal ───────────────────────────────────── -->
+<div class="modal-overlay" id="leads-modal">
+  <div class="modal" style="max-width:680px">
+    <div class="modal-header">
+      <div class="modal-title" id="leads-modal-title"><i class="fas fa-users"></i> Leads</div>
+      <button class="modal-close" onclick="closeModal('leads-modal')">&times;</button>
+    </div>
+    <div id="leads-modal-body" style="max-height:460px; overflow-y:auto"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('leads-modal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<style>
+.stat-card { display:flex; align-items:center; gap:14px; }
+.stat-icon { width:44px; height:44px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; }
+.stat-value { font-size:22px; font-weight:700; line-height:1; }
+.stat-label { font-size:11px; color:var(--text3); margin-top:2px; }
+
+.color-dot { width:26px; height:26px; border-radius:50%; cursor:pointer; border:2px solid transparent; transition:transform .15s, border-color .15s; display:inline-flex; align-items:center; justify-content:center; }
+.color-dot.selected { border-color:#fff; transform:scale(1.15); box-shadow:0 0 0 2px rgba(0,0,0,.3); }
+.color-dot.selected::after { content:'✓'; color:#fff; font-size:12px; font-weight:700; }
+
+/* Category card */
+.cat-card { border-radius:14px; overflow:hidden; border:1px solid var(--border); transition:box-shadow .2s, transform .2s; }
+.cat-card:hover { box-shadow:0 6px 24px rgba(0,0,0,.12); transform:translateY(-2px); }
+.cat-card-header { padding:18px 18px 14px; display:flex; align-items:flex-start; gap:14px; }
+.cat-icon-wrap { width:50px; height:50px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:22px; flex-shrink:0; }
+.cat-card-body { padding:0 18px 14px; }
+.subcat-item { display:flex; align-items:center; justify-content:space-between; padding:9px 12px; background:var(--surface2); border-radius:8px; margin-bottom:6px; font-size:13px; }
+.subcat-item:last-child { margin-bottom:0; }
+.cat-card-footer { padding:12px 18px; border-top:1px solid var(--border); display:flex; gap:8px; }
+.badge-inactive { background:rgba(239,68,68,.1); color:var(--red); font-size:10px; padding:2px 7px; border-radius:10px; }
+.badge-active { background:rgba(16,185,129,.1); color:var(--green); font-size:10px; padding:2px 7px; border-radius:10px; }
+</style>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let selectedColor = '#F97316';
+let editingCatId = null;
+
+/* ── LOAD ─────────────────────────────────────────────────── */
+async function loadCategories() {
+  const cats = await apiFetch('/api/tour-categories');
+  if (!cats) return;
+
+  // Stats
+  const total = cats.length;
+  const active = cats.filter(c => c.is_active).length;
+  const subcats = cats.reduce((s, c) => s + (c.subcategories||[]).length, 0);
+  const leads = cats.reduce((s, c) => s + (c.lead_count||0), 0);
+  document.getElementById('stat-total-cats').textContent = total;
+  document.getElementById('stat-active-cats').textContent = active;
+  document.getElementById('stat-total-subcats').textContent = subcats;
+  document.getElementById('stat-total-leads').textContent = leads;
+
+  const grid = document.getElementById('categories-grid');
+  if (!cats.length) {
+    grid.innerHTML = `
+      <div style="grid-column:1/-1" class="card">
+        <div class="empty-state">
+          <i class="fas fa-layer-group"></i>
+          <h3>No categories yet</h3>
+          <p>Click "Add Category" to create your first tour category</p>
+        </div>
+      </div>`;
+    return;
+  }
+
+  grid.innerHTML = cats.map(cat => renderCatCard(cat)).join('');
+}
+
+function renderCatCard(cat) {
+  const color = cat.color || '#F97316';
+  const icon = cat.icon || 'fa-map-marked-alt';
+  const subcats = cat.subcategories || [];
+
+  const subcatHtml = subcats.length
+    ? subcats.map(s => `
+        <div class="subcat-item">
+          <div>
+            <span style="font-weight:600">${s.name}</span>
+            ${s.duration_days ? `<span style="color:var(--text3); margin-left:6px">${s.duration_nights}N/${s.duration_days}D</span>` : ''}
+            ${s.starting_price ? `<span style="color:var(--green); margin-left:6px; font-size:12px">₹${Number(s.starting_price).toLocaleString('en-IN')}+</span>` : ''}
+            <span class="${s.is_active?'badge-active':'badge-inactive'}" style="margin-left:6px">${s.is_active?'Active':'Inactive'}</span>
+          </div>
+          <div style="display:flex; gap:6px">
+            <button class="btn btn-sm btn-secondary" onclick="openEditSubCatModal(${cat.id},${s.id})" title="Edit"><i class="fas fa-edit"></i></button>
+            <button class="btn btn-sm btn-danger" onclick="deleteSubCat(${s.id},${cat.id})" title="Delete"><i class="fas fa-trash"></i></button>
+          </div>
+        </div>`)
+      .join('')
+    : `<div style="color:var(--text3); font-size:12px; text-align:center; padding:12px 0">No sub-categories yet</div>`;
+
+  return `
+    <div class="cat-card card" style="padding:0">
+      <div class="cat-card-header">
+        <div class="cat-icon-wrap" style="background:${color}22; color:${color}">
+          <i class="fas ${icon}"></i>
+        </div>
+        <div style="flex:1; min-width:0">
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap">
+            <span style="font-weight:700; font-size:15px">${cat.name}</span>
+            <span class="${cat.is_active?'badge-active':'badge-inactive'}">${cat.is_active?'Active':'Inactive'}</span>
+          </div>
+          ${cat.description ? `<div style="font-size:12px; color:var(--text3); margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">${cat.description}</div>` : ''}
+          <div style="display:flex; gap:12px; margin-top:6px; font-size:11px; color:var(--text3)">
+            <span><i class="fas fa-tags"></i> ${(cat.subcategories||[]).length} sub-categories</span>
+            <span><i class="fas fa-users"></i> ${cat.lead_count||0} leads</span>
+          </div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:4px">
+          <button class="btn btn-sm btn-secondary" onclick="openEditCatModal(${cat.id})" title="Edit"><i class="fas fa-edit"></i></button>
+          <button class="btn btn-sm btn-danger" onclick="deleteCat(${cat.id})" title="Delete"><i class="fas fa-trash"></i></button>
+        </div>
+      </div>
+
+      <div class="cat-card-body">
+        <div style="font-size:11px; color:var(--text3); font-weight:600; text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px">Sub-Categories</div>
+        ${subcatHtml}
+      </div>
+
+      <div class="cat-card-footer">
+        <button class="btn btn-primary btn-sm" style="flex:1" onclick="openAddSubCatModal(${cat.id})">
+          <i class="fas fa-plus"></i> Add Sub-Category
+        </button>
+        ${cat.lead_count > 0 ? `<button class="btn btn-secondary btn-sm" onclick="viewLeads(${cat.id},'${cat.name}')"><i class="fas fa-users"></i> View Leads</button>` : ''}
+      </div>
+    </div>`;
+}
+
+/* ── CATEGORY MODAL ───────────────────────────────────────── */
+function openCategoryModal() {
+  editingCatId = null;
+  document.getElementById('cat-modal-title').innerHTML = '<i class="fas fa-layer-group"></i> Add Category';
+  document.getElementById('cat-name').value = '';
+  document.getElementById('cat-desc').value = '';
+  document.getElementById('cat-icon').value = '';
+  document.getElementById('cat-sort').value = '0';
+  document.getElementById('cat-active').checked = true;
+  document.getElementById('icon-preview').style.display = 'none';
+  selectColor('#F97316');
+  document.getElementById('cat-modal').classList.add('show');
+}
+
+async function openEditCatModal(catId) {
+  const cat = await apiFetch(`/api/tour-categories/${catId}`);
+  if (!cat) return;
+  editingCatId = catId;
+  document.getElementById('cat-modal-title').innerHTML = '<i class="fas fa-edit"></i> Edit Category';
+  document.getElementById('cat-name').value = cat.name;
+  document.getElementById('cat-desc').value = cat.description || '';
+  document.getElementById('cat-icon').value = (cat.icon||'').replace('fa-','');
+  document.getElementById('cat-sort').value = cat.sort_order || 0;
+  document.getElementById('cat-active').checked = !!cat.is_active;
+  selectColor(cat.color || '#F97316');
+  previewIcon(document.getElementById('cat-icon').value);
+  document.getElementById('cat-modal').classList.add('show');
+}
+
+async function saveCategory() {
+  const name = document.getElementById('cat-name').value.trim();
+  if (!name) { toast('Category name is required', 'error'); return; }
+
+  const payload = {
+    name,
+    description: document.getElementById('cat-desc').value.trim(),
+    icon: 'fa-' + (document.getElementById('cat-icon').value.replace('fa-','')||'map-marked-alt'),
+    color: selectedColor,
+    sort_order: parseInt(document.getElementById('cat-sort').value)||0,
+    is_active: document.getElementById('cat-active').checked ? 1 : 0
+  };
+
+  const url = editingCatId ? `/api/tour-categories/${editingCatId}` : '/api/tour-categories';
+  const method = editingCatId ? 'PUT' : 'POST';
+
+  try {
+    await apiFetch(url, { method, body: JSON.stringify(payload) });
+    toast(editingCatId ? 'Category updated!' : 'Category created!', 'success');
+    closeModal('cat-modal');
+    loadCategories();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function deleteCat(catId) {
+  if (!confirm('Delete this category? All sub-categories will also be deleted.')) return;
+  try {
+    await apiFetch(`/api/tour-categories/${catId}`, { method: 'DELETE' });
+    toast('Category deleted', 'success');
+    loadCategories();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+/* ── SUB-CATEGORY MODAL ───────────────────────────────────── */
+function openAddSubCatModal(catId) {
+  document.getElementById('subcat-modal-title').innerHTML = '<i class="fas fa-tag"></i> Add Sub-Category';
+  document.getElementById('subcat-parent-id').value = catId;
+  document.getElementById('subcat-edit-id').value = '';
+  document.getElementById('subcat-name').value = '';
+  document.getElementById('subcat-desc').value = '';
+  document.getElementById('subcat-days').value = '';
+  document.getElementById('subcat-nights').value = '';
+  document.getElementById('subcat-price').value = '';
+  document.getElementById('subcat-sort').value = '0';
+  document.getElementById('subcat-tags').value = '';
+  document.getElementById('subcat-active').checked = true;
+  document.getElementById('subcat-modal').classList.add('show');
+}
+
+async function openEditSubCatModal(catId, subcatId) {
+  const s = await apiFetch(`/api/tour-subcategories/${subcatId}`);
+  if (!s) return;
+  document.getElementById('subcat-modal-title').innerHTML = '<i class="fas fa-edit"></i> Edit Sub-Category';
+  document.getElementById('subcat-parent-id').value = catId;
+  document.getElementById('subcat-edit-id').value = subcatId;
+  document.getElementById('subcat-name').value = s.name;
+  document.getElementById('subcat-desc').value = s.description || '';
+  document.getElementById('subcat-days').value = s.duration_days || '';
+  document.getElementById('subcat-nights').value = s.duration_nights || '';
+  document.getElementById('subcat-price').value = s.starting_price || '';
+  document.getElementById('subcat-sort').value = s.sort_order || 0;
+  document.getElementById('subcat-tags').value = s.tags || '';
+  document.getElementById('subcat-active').checked = !!s.is_active;
+  document.getElementById('subcat-modal').classList.add('show');
+}
+
+async function saveSubCategory() {
+  const name = document.getElementById('subcat-name').value.trim();
+  if (!name) { toast('Sub-category name is required', 'error'); return; }
+  const catId = document.getElementById('subcat-parent-id').value;
+  const editId = document.getElementById('subcat-edit-id').value;
+
+  const payload = {
+    category_id: parseInt(catId),
+    name,
+    description: document.getElementById('subcat-desc').value.trim(),
+    duration_days: parseInt(document.getElementById('subcat-days').value)||null,
+    duration_nights: parseInt(document.getElementById('subcat-nights').value)||null,
+    starting_price: parseFloat(document.getElementById('subcat-price').value)||null,
+    sort_order: parseInt(document.getElementById('subcat-sort').value)||0,
+    tags: document.getElementById('subcat-tags').value.trim(),
+    is_active: document.getElementById('subcat-active').checked ? 1 : 0
+  };
+
+  const url = editId ? `/api/tour-subcategories/${editId}` : `/api/tour-categories/${catId}/subcategories`;
+  const method = editId ? 'PUT' : 'POST';
+
+  try {
+    await apiFetch(url, { method, body: JSON.stringify(payload) });
+    toast(editId ? 'Sub-category updated!' : 'Sub-category added!', 'success');
+    closeModal('subcat-modal');
+    loadCategories();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function deleteSubCat(subcatId, catId) {
+  if (!confirm('Delete this sub-category?')) return;
+  try {
+    await apiFetch(`/api/tour-subcategories/${subcatId}`, { method: 'DELETE' });
+    toast('Sub-category deleted', 'success');
+    loadCategories();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+/* ── VIEW LEADS ───────────────────────────────────────────── */
+async function viewLeads(catId, catName) {
+  document.getElementById('leads-modal-title').innerHTML = `<i class="fas fa-users"></i> Leads — ${catName}`;
+  document.getElementById('leads-modal-body').innerHTML = '<div class="loading"><div class="spinner"></div> Loading...</div>';
+  document.getElementById('leads-modal').classList.add('show');
+
+  const leads = await apiFetch(`/api/tour-categories/${catId}/leads`);
+  if (!leads || !leads.length) {
+    document.getElementById('leads-modal-body').innerHTML = '<div class="empty-state"><i class="fas fa-users"></i><h3>No leads</h3></div>';
+    return;
+  }
+  document.getElementById('leads-modal-body').innerHTML = leads.map(l => `
+    <a href="/leads/${l.id}" style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid var(--border); text-decoration:none; color:var(--text)">
+      <div>
+        <div style="font-weight:600">${l.customer_name}</div>
+        <div style="font-size:12px; color:var(--text3)">${l.mobile} · ${l.tour_name||'—'}</div>
+      </div>
+      <div style="text-align:right">
+        ${statusBadge(l.status)}
+        <div style="font-size:11px; color:var(--text3); margin-top:4px">${formatDate(l.created_at)}</div>
+      </div>
+    </a>`).join('');
+}
+
+/* ── HELPERS ──────────────────────────────────────────────── */
+function selectColor(color) {
+  selectedColor = color;
+  document.querySelectorAll('.color-dot').forEach(d => {
+    d.classList.toggle('selected', d.dataset.color === color);
+  });
+  const prev = document.getElementById('icon-preview-el');
+  if (prev) prev.style.color = color;
+}
+
+function previewIcon(val) {
+  const cls = val.replace('fa-','');
+  if (!cls) { document.getElementById('icon-preview').style.display='none'; return; }
+  document.getElementById('icon-preview').style.display='block';
+  const el = document.getElementById('icon-preview-el');
+  el.className = `fas fa-${cls}`;
+  el.style.color = selectedColor;
+}
+
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+loadCategories();
+</script>
+{% endblock %}

@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+{% block title %}Staff — Travel CRM{% endblock %}
+{% block nav_staff %}active{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Staff Management</h1>
+    <div class="sub">Manage staff accounts and performance</div>
+  </div>
+  <div class="page-header-actions">
+    <button class="btn btn-primary" onclick="openAddModal()"><i class="fas fa-user-plus"></i> Add Staff</button>
+  </div>
+</div>
+
+<!-- Performance Table -->
+<div class="card" style="margin-bottom:20px; padding:0; overflow:hidden">
+  <div style="padding:16px 20px; border-bottom:1px solid var(--border)">
+    <div class="card-title" style="margin:0"><i class="fas fa-ranking-star"></i> Performance Overview</div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Staff Member</th>
+          <th>Total Leads</th>
+          <th>New</th>
+          <th>Converted</th>
+          <th>Lost</th>
+          <th>Calls Made</th>
+          <th>Bookings</th>
+          <th>Revenue</th>
+          <th>Conv. Rate</th>
+        </tr>
+      </thead>
+      <tbody id="perf-tbody">
+        <tr><td colspan="9"><div class="loading"><div class="spinner"></div></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Staff List -->
+<div class="card" style="padding:0; overflow:hidden">
+  <div style="padding:16px 20px; border-bottom:1px solid var(--border)">
+    <div class="card-title" style="margin:0"><i class="fas fa-users"></i> All Staff Accounts</div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Username</th>
+          <th>Role</th>
+          <th>Phone</th>
+          <th>Email</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="staff-tbody">
+        <tr><td colspan="7"><div class="loading"><div class="spinner"></div></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Add/Edit Staff Modal -->
+<div class="modal-overlay" id="staff-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">Add Staff</div>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Full Name *</label>
+        <input type="text" class="form-control" id="sf-fullname">
+      </div>
+      <div class="form-group">
+        <label>Username *</label>
+        <input type="text" class="form-control" id="sf-username">
+      </div>
+      <div class="form-group">
+        <label>Password <span id="pw-hint" style="color:var(--text3); font-size:10px">(required for new user)</span></label>
+        <input type="password" class="form-control" id="sf-password" placeholder="Enter password">
+      </div>
+      <div class="form-group">
+        <label>Role</label>
+        <select class="form-control" id="sf-role">
+          <option value="staff">Staff</option>
+          <option value="manager">Manager</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Phone</label>
+        <input type="tel" class="form-control" id="sf-phone">
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" class="form-control" id="sf-email">
+      </div>
+      <div class="form-group" id="active-row" style="display:none">
+        <label>Status</label>
+        <select class="form-control" id="sf-active">
+          <option value="1">Active</option>
+          <option value="0">Inactive</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveStaff()" id="save-btn">Add Staff</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let editingId = null;
+
+async function loadPerformance() {
+  const data = await apiFetch('/api/staff/performance');
+  console.log('Performance data:', data);
+  if (!data) return;
+  const tbody = document.getElementById('perf-tbody');
+  if (!data.length) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:var(--text3)">No staff data</td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.map(s => {
+    const rate = s.total_leads > 0 ? Math.round((s.converted / s.total_leads) * 100) : 0;
+    return `
+      <tr>
+        <td><strong>${s.full_name}</strong><div style="font-size:11px; color:var(--text3)">@${s.username}</div></td>
+        <td>${s.total_leads}</td>
+        <td><span class="badge badge-new">${s.new_leads}</span></td>
+        <td><span class="badge badge-booked">${s.converted}</span></td>
+        <td><span class="badge badge-lost">${s.lost}</span></td>
+        <td>${s.total_calls}</td>
+        <td style="font-weight:600">${s.bookings}</td>
+        <td style="color:var(--green); font-weight:600">${formatCurrency(s.revenue)}</td>
+        <td>
+          <div style="display:flex; align-items:center; gap:6px">
+            <div style="background:var(--border); border-radius:4px; height:6px; flex:1; max-width:60px">
+              <div style="background:var(--green); height:6px; border-radius:4px; width:${rate}%"></div>
+            </div>
+            <span style="font-size:11px; color:var(--text2)">${rate}%</span>
+          </div>
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+async function loadStaff() {
+  const data = await apiFetch('/api/users');
+  if (!data) return;
+  const tbody = document.getElementById('staff-tbody');
+  tbody.innerHTML = data.map(u => `
+    <tr>
+      <td>
+        <div style="display:flex; align-items:center; gap:10px">
+          <div style="width:32px; height:32px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; font-weight:700; flex-shrink:0">
+            ${u.full_name.charAt(0)}
+          </div>
+          <div>
+            <div style="font-weight:600">${u.full_name}</div>
+          </div>
+        </div>
+      </td>
+      <td><code style="color:var(--text3)">@${u.username}</code></td>
+      <td>
+        <span class="badge ${u.role==='admin'?'badge-booked':u.role==='manager'?'badge-negotiation':'badge-followup'}">
+          ${u.role}
+        </span>
+      </td>
+      <td>${u.phone||'—'}</td>
+      <td style="font-size:12px; color:var(--text3)">${u.email||'—'}</td>
+      <td>
+        <span class="badge ${u.is_active?'badge-booked':'badge-lost'}">
+          ${u.is_active?'Active':'Inactive'}
+        </span>
+      </td>
+      <td>
+        <div style="display:flex; gap:4px">
+          <button class="btn btn-icon btn-sm" onclick="editStaff(${u.id},'${u.full_name}','${u.username}','${u.role}','${u.phone||''}','${u.email||''}',${u.is_active})" title="Edit">
+            <i class="fas fa-edit"></i>
+          </button>
+          ${u.role !== 'admin' ? `<button class="btn btn-icon btn-sm" style="color:var(--red)" onclick="toggleUser(${u.id}, ${u.is_active})" title="${u.is_active?'Deactivate':'Activate'}">
+            <i class="fas fa-${u.is_active?'ban':'check'}"></i>
+          </button>` : ''}
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function openAddModal() {
+  editingId = null;
+  document.getElementById('modal-title').textContent = 'Add New Staff';
+  document.getElementById('save-btn').textContent = 'Add Staff';
+  document.getElementById('pw-hint').textContent = '(required)';
+  document.getElementById('active-row').style.display = 'none';
+  ['sf-fullname','sf-username','sf-password','sf-phone','sf-email'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('sf-role').value = 'staff';
+  document.getElementById('staff-modal').classList.add('show');
+}
+
+function editStaff(id, name, username, role, phone, email, active) {
+  editingId = id;
+  document.getElementById('modal-title').textContent = 'Edit Staff';
+  document.getElementById('save-btn').textContent = 'Save Changes';
+  document.getElementById('pw-hint').textContent = '(leave blank to keep current)';
+  document.getElementById('active-row').style.display = 'block';
+  document.getElementById('sf-fullname').value = name;
+  document.getElementById('sf-username').value = username;
+  document.getElementById('sf-password').value = '';
+  document.getElementById('sf-role').value = role;
+  document.getElementById('sf-phone').value = phone;
+  document.getElementById('sf-email').value = email;
+  document.getElementById('sf-active').value = active ? '1' : '0';
+  document.getElementById('staff-modal').classList.add('show');
+}
+
+async function saveStaff() {
+  const payload = {
+    full_name: document.getElementById('sf-fullname').value.trim(),
+    username: document.getElementById('sf-username').value.trim(),
+    role: document.getElementById('sf-role').value,
+    phone: document.getElementById('sf-phone').value.trim(),
+    email: document.getElementById('sf-email').value.trim(),
+  };
+  const pw = document.getElementById('sf-password').value;
+  if (pw) payload.password = pw;
+  if (editingId) payload.is_active = parseInt(document.getElementById('sf-active').value);
+  
+  if (!payload.full_name || !payload.username) {
+    toast('Name and username are required', 'error'); return;
+  }
+  if (!editingId && !pw) {
+    toast('Password is required for new user', 'error'); return;
+  }
+  
+  try {
+    if (editingId) {
+      await apiFetch(`/api/users/${editingId}`, { method: 'PUT', body: JSON.stringify(payload) });
+      toast('Staff updated!', 'success');
+    } else {
+      await apiFetch('/api/users', { method: 'POST', body: JSON.stringify(payload) });
+      toast('Staff added!', 'success');
+    }
+    closeModal();
+    loadStaff();
+    loadPerformance();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function toggleUser(id, active) {
+  await apiFetch(`/api/users/${id}`, { method: 'PUT', body: JSON.stringify({ is_active: active ? 0 : 1 }) });
+  toast(active ? 'User deactivated' : 'User activated', 'success');
+  loadStaff();
+}
+
+function closeModal() { document.getElementById('staff-modal').classList.remove('show'); }
+
+loadPerformance();
+loadStaff();
+</script>
+{% endblock %}

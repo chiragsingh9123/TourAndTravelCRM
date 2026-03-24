@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+{% block title %}Leads — Travel CRM{% endblock %}
+{% block nav_leads %}active{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>All Leads</h1>
+    <div class="sub">Manage and track all customer enquiries</div>
+  </div>
+  <div class="page-header-actions">
+    <a href="/leads/new" class="btn btn-primary"><i class="fas fa-plus"></i> New Enquiry</a>
+  </div>
+</div>
+
+<div class="filters-bar">
+  <input type="text" class="filter-input" id="search-input" placeholder="🔍  Search name, mobile, tour..." style="min-width:260px">
+  <select class="filter-select" id="status-filter">
+    <option value="">All Status</option>
+    <option>New Lead</option>
+    <option>Follow-up</option>
+    <option>Negotiation</option>
+    <option>Booked</option>
+    <option>Lost</option>
+  </select>
+  <select class="filter-select" id="staff-filter" style="display:none">
+    <option value="">All Staff</option>
+  </select>
+  <button class="btn btn-secondary btn-sm" onclick="clearFilters()"><i class="fas fa-times"></i> Clear</button>
+  <span id="total-count" style="color:var(--text3); font-size:12px; margin-left:auto"></span>
+</div>
+
+<div class="card" style="padding:0; overflow:hidden">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Lead ID</th>
+          <th>Customer</th>
+          <th>Mobile</th>
+          <th>Tour Package</th>
+          <th>Travel Date</th>
+          <th>Status</th>
+          <th>Assigned To</th>
+          <th>Enquiry Date</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="leads-tbody">
+        <tr><td colspan="9"><div class="loading"><div class="spinner"></div> Loading leads...</div></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div style="padding:16px 20px; border-top:1px solid var(--border); display:flex; align-items:center; gap:8px" id="pagination-bar">
+    <div id="pagination-btns" style="display:flex; gap:6px"></div>
+    <div class="page-info" id="page-info"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="assign-modal">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header">
+      <div class="modal-title">Assign Lead</div>
+      <button class="modal-close" onclick="closeLeadModal('assign-modal')">&times;</button>
+    </div>
+    <div class="form-group">
+      <label>Assign To</label>
+      <select class="form-control" id="assign-staff-select"></select>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeLeadModal('assign-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="doAssign()">Assign</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+var LD_API = '{{ API_BASE }}';
+var ldCurrentPage = 1;
+var ldCurrentLeadId = null;
+
+window.addEventListener('load', function() {
+  console.log('[Leads] window.load fired');
+
+  /* search */
+  var si = document.getElementById('search-input');
+  var st;
+  if (si) si.addEventListener('input', function() {
+    clearTimeout(st);
+    st = setTimeout(function(){ loadLeads(1); }, 400);
+  });
+
+  var sf = document.getElementById('status-filter');
+  if (sf) sf.addEventListener('change', function(){ loadLeads(1); });
+
+  var stf = document.getElementById('staff-filter');
+  if (stf) stf.addEventListener('change', function(){ loadLeads(1); });
+
+  loadStaffFilter();
+  loadLeads(1);
+});
+
+async function loadLeads(page) {
+  page = page || 1;
+  console.log('[Leads] loadLeads page=' + page);
+
+  var search = (document.getElementById('search-input').value || '').trim();
+  var status = document.getElementById('status-filter').value || '';
+  var staff  = document.getElementById('staff-filter').value  || '';
+
+  var qs = 'page=' + page + '&per_page=25';
+  if (search) qs += '&search=' + encodeURIComponent(search);
+  if (status) qs += '&status=' + encodeURIComponent(status);
+  if (staff)  qs += '&assigned_to=' + encodeURIComponent(staff);
+
+  var tbody = document.getElementById('leads-tbody');
+  tbody.innerHTML = '<tr><td colspan="9"><div class="loading"><div class="spinner"></div> Loading...</div></td></tr>';
+
+  var token = localStorage.getItem('crm_token');
+  if (!token) { window.location.href = '/login'; return; }
+
+  try {
+    var url = LD_API + '/api/leads?' + qs;
+    console.log('[Leads] GET ' + url);
+    var res = await fetch(url, {
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }
+    });
+    console.log('[Leads] status=' + res.status);
+
+    if (res.status === 401) {
+      tbody.innerHTML = errRow('Session expired. <a href="/login" style="color:var(--accent)">Log in again</a>.', 9);
+      return;
+    }
+
+    var data = await res.json();
+    console.log('[Leads] total=' + data.total);
+
+    ldCurrentPage = page;
+    var total = data.total || 0;
+    var tc = document.getElementById('total-count');
+    if (tc) tc.textContent = total + ' leads found';
+
+    var leads = data.leads || [];
+    if (!leads.length) {
+      tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state"><i class="fas fa-users"></i><h3>No leads found</h3><p>Try adjusting your filters</p></div></td></tr>';
+      var pb = document.getElementById('pagination-btns'); if(pb) pb.innerHTML = '';
+      var pi = document.getElementById('page-info');       if(pi) pi.textContent = '';
+      return;
+    }
+
+    tbody.innerHTML = leads.map(function(l) {
+      var altMobile = l.alt_mobile ? '<div style="font-size:11px;color:var(--text3)">'+l.alt_mobile+'</div>' : '';
+      var travelDate = l.travel_date ? ldFmtDate(l.travel_date) : '—';
+      var enquiryDate = ldFmtDate(l.enquiry_date || l.created_at);
+      return '<tr style="cursor:pointer" onclick="window.location=\'/leads/'+l.id+'\'">'
+        + '<td><code style="color:var(--accent);font-size:11px;font-weight:600">'+l.lead_id+'</code></td>'
+        + '<td><div style="font-weight:600">'+l.customer_name+'</div><div style="font-size:11px;color:var(--text3)">'+(l.city||'')+'</div></td>'
+        + '<td><div>'+l.mobile+'</div>'+altMobile+'</td>'
+        + '<td><div>'+(l.tour_name||'—')+'</div><div style="font-size:11px;color:var(--text3)">'+l.vehicle_type+' · '+l.hotel_category+'</div></td>'
+        + '<td style="color:var(--text2)">'+travelDate+'</td>'
+        + '<td>'+ldStatusBadge(l.status)+'</td>'
+        + '<td style="font-size:12px">'+(l.assigned_name||'Unassigned')+'</td>'
+        + '<td style="color:var(--text3);font-size:12px">'+enquiryDate+'</td>'
+        + '<td onclick="event.stopPropagation()">'
+        +   '<div style="display:flex;gap:4px">'
+        +   '<a href="/leads/'+l.id+'" class="btn btn-icon btn-sm" title="View"><i class="fas fa-eye"></i></a>'
+        +   '<button class="btn btn-icon btn-sm ld-admin-only" style="display:none" title="Assign" onclick="openAssignModal('+l.id+')"><i class="fas fa-user-plus"></i></button>'
+        +   '</div></td>'
+        + '</tr>';
+    }).join('');
+
+    /* show admin buttons if admin/manager */
+    var userStr = localStorage.getItem('crm_user');
+    if (userStr) {
+      try {
+        var u = JSON.parse(userStr);
+        if (u.role === 'admin' || u.role === 'manager') {
+          document.querySelectorAll('.ld-admin-only').forEach(function(el){ el.style.display = ''; });
+          var stfEl = document.getElementById('staff-filter');
+          if (stfEl) stfEl.style.display = '';
+        }
+      } catch(e) {}
+    }
+
+    /* pagination */
+    var totalPages = Math.ceil(total / 25);
+    var pagesEl = document.getElementById('pagination-btns');
+    var out = '';
+    if (page > 1) out += '<button class="page-btn" onclick="loadLeads('+(page-1)+')"><i class="fas fa-chevron-left"></i></button>';
+    for (var p = Math.max(1, page-2); p <= Math.min(totalPages, page+2); p++) {
+      out += '<button class="page-btn '+(p===page?'active':'')+'" onclick="loadLeads('+p+')">'+p+'</button>';
+    }
+    if (page < totalPages) out += '<button class="page-btn" onclick="loadLeads('+(page+1)+')"><i class="fas fa-chevron-right"></i></button>';
+    if (pagesEl) pagesEl.innerHTML = out;
+    var piEl = document.getElementById('page-info');
+    if (piEl) piEl.textContent = 'Page ' + page + ' of ' + totalPages + ' · ' + total + ' total';
+
+  } catch(e) {
+    console.error('[Leads] ERROR:', e);
+    tbody.innerHTML = errRow('Connection error: ' + e.message + '<br><button class="btn btn-sm btn-primary" style="margin-top:10px" onclick="loadLeads(1)">Retry</button>', 9);
+  }
+}
+
+async function loadStaffFilter() {
+  var userStr = localStorage.getItem('crm_user');
+  if (!userStr) return;
+  try {
+    var u = JSON.parse(userStr);
+    if (u.role === 'staff') return;
+  } catch(e) { return; }
+
+  var token = localStorage.getItem('crm_token');
+  if (!token) return;
+
+  try {
+    var res = await fetch(LD_API + '/api/users', {
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }
+    });
+    if (!res.ok) return;
+    var users = await res.json();
+
+    var sel  = document.getElementById('staff-filter');
+    var asel = document.getElementById('assign-staff-select');
+
+    users.filter(function(u){ return u.role === 'staff' && u.is_active; }).forEach(function(u) {
+      if (sel)  sel.innerHTML  += '<option value="'+u.id+'">'+u.full_name+'</option>';
+      if (asel) asel.innerHTML += '<option value="'+u.id+'">'+u.full_name+'</option>';
+    });
+  } catch(e) { console.warn('[Leads] loadStaffFilter error:', e); }
+}
+
+function clearFilters() {
+  var si = document.getElementById('search-input');   if(si) si.value = '';
+  var sf = document.getElementById('status-filter');  if(sf) sf.value = '';
+  var stf = document.getElementById('staff-filter');  if(stf) stf.value = '';
+  loadLeads(1);
+}
+
+function openAssignModal(leadId) {
+  ldCurrentLeadId = leadId;
+  var m = document.getElementById('assign-modal');
+  if (m) m.classList.add('show');
+}
+
+function closeLeadModal(id) {
+  var m = document.getElementById(id);
+  if (m) m.classList.remove('show');
+}
+
+async function doAssign() {
+  var staffId = document.getElementById('assign-staff-select').value;
+  if (!staffId) { if(typeof toast==='function') toast('Please select a staff member', 'error'); return; }
+
+  var token = localStorage.getItem('crm_token');
+  try {
+    await fetch(LD_API + '/api/leads/' + ldCurrentLeadId + '/assign', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assigned_to: parseInt(staffId) })
+    });
+    closeLeadModal('assign-modal');
+    if(typeof toast==='function') toast('Lead assigned successfully', 'success');
+    loadLeads(ldCurrentPage);
+  } catch(e) {
+    if(typeof toast==='function') toast('Error: ' + e.message, 'error');
+  }
+}
+
+/* ── utils local to this page ── */
+function ldFmtDate(d) {
+  if (!d) return '—';
+  try { return new Date(d).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); }
+  catch(e) { return d; }
+}
+
+function ldStatusBadge(status) {
+  var map = {'New Lead':'new','Follow-up':'followup','Negotiation':'negotiation','Booked':'booked','Lost':'lost'};
+  return '<span class="badge badge-'+(map[status]||'new')+'">'+status+'</span>';
+}
+
+function errRow(msg, cols) {
+  return '<tr><td colspan="'+cols+'"><div class="empty-state">'
+    + '<i class="fas fa-exclamation-circle" style="color:var(--red);font-size:32px;display:block;margin-bottom:12px"></i>'
+    + '<h3>Error</h3><p>'+msg+'</p></div></td></tr>';
+}
+</script>
+{% endblock %}
