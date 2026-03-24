@@ -1,136 +1,258 @@
 # 🧳 TourAndTravelCRM
 
-> A production-ready **Travel Agency CRM** built with **Flask · MySQL · Vanilla JS**  
-> Manage leads, packages, bookings, payments & WhatsApp messaging — all in one place.
+> 🚀 A modern **Travel Agency CRM** built with **Flask · MySQL · Vanilla JS**
+> Manage leads, bookings, payments & WhatsApp communication — all in one powerful dashboard.
+
+---
+
+## 🌟 Overview
+
+TourAndTravelCRM is a **complete business solution for travel agencies** to manage their sales pipeline, customer interactions, and bookings efficiently.
+
+It replaces messy Excel sheets, manual follow-ups, and scattered communication with a **centralized automation system**.
 
 ---
 
 ## ✨ Features
 
-| Module | Description |
-|--------|-------------|
-| 🧑‍💼 **Lead Management** | Capture, assign & track leads through the full sales pipeline |
-| 📞 **Conversation Timeline** | Log calls with result, duration & auto follow-up scheduling |
-| 📦 **Package Builder** | Build custom tour packages with itinerary, hotels, transport & pricing |
-| 🏨 **Tour Categories** | Organize leads by tour type with sub-categories & starting prices |
-| 🎫 **Bookings & Payments** | Convert leads to bookings, record partial payments, track balance |
-| 💬 **WhatsApp Integration** | Pre-built Hindi/English message templates with one-click send |
-| 📊 **Dashboard & Reports** | Revenue stats, staff performance & lead status breakdown |
-| 🔐 **Role-based Access** | Admin, Manager & Staff roles with JWT authentication |
-| 📌 **Pinned Notes** | Attach color-tagged notes to any lead |
-| 📤 **CSV Export** | Export leads and bookings data anytime |
+### 🧑‍💼 Lead Management
+
+* Capture leads from multiple sources
+* Assign leads to staff
+* Track lead status (New → Contacted → Converted)
+
+### 📞 Smart Conversation Timeline
+
+* Log call details (duration, outcome)
+* Maintain full communication history
+* Auto-create follow-ups
+
+### 📦 Tour Package Builder
+
+* Create custom travel packages
+* Add itinerary, hotel, transport & pricing
+* Flexible pricing structure
+
+### 🏨 Tour Categories
+
+* Organize packages into categories
+* Sub-category support
+* Set starting prices for quick filtering
+
+### 🎫 Bookings & Payments
+
+* Convert leads into bookings
+* Record partial/full payments
+* Track pending balances
+
+### 💬 WhatsApp Integration
+
+* Pre-built message templates (Hindi + English)
+* One-click send to customers
+* Perfect for follow-ups & confirmations
+
+### 📊 Dashboard & Reports
+
+* Revenue analytics
+* Staff performance tracking
+* Lead conversion insights
+
+### 🔐 Role-Based Access (JWT)
+
+* Admin → Full control
+* Manager → Operations + reports
+* Staff → Assigned leads only
+
+### 📌 Smart Notes System
+
+* Add color-tagged notes
+* Pin important information
+* Quick access during calls
+
+### 📤 Export System
+
+* Export leads & bookings to CSV
+* Useful for reporting & backups
+
+---
+
+## 🖼️ Screenshots (Add your images here)
+
+```
+/screenshots/dashboard.png
+/screenshots/leads.png
+/screenshots/booking.png
+```
+
+> 💡 Tip: Add screenshots to make your repo look 10x more professional
 
 ---
 
 ## 🗂️ Project Structure
+
 ```
 TourAndTravelCRM/
 │
-├── 🐍 backend/
-│   └── app.py                        # Flask REST API — all routes & DB logic
+├── backend/
+│   └── app.py
 │
-├── 🗄️ db/
-│   ├── travel_crm_leads.sql          # Leads table
-│   ├── travel_crm_bookings.sql       # Bookings table
-│   ├── travel_crm_conversations.sql  # Call logs & timeline
-│   ├── travel_crm_followups.sql      # Follow-up scheduler
-│   ├── travel_crm_packages.sql       # Tour package builder
-│   ├── travel_crm_payments.sql       # Payment records
-│   ├── travel_crm_users.sql          # Staff & roles
-│   └── travel_crm_activity_logs.sql  # Audit trail
+├── db/
+│   ├── travel_crm_leads.sql
+│   ├── travel_crm_bookings.sql
+│   ├── travel_crm_conversations.sql
+│   ├── travel_crm_followups.sql
+│   ├── travel_crm_packages.sql
+│   ├── travel_crm_payments.sql
+│   ├── travel_crm_users.sql
+│   └── travel_crm_activity_logs.sql
 │
-└── 🎨 frontend/
-    ├── app.py                        # Flask template server
+└── frontend/
+    ├── app.py
     └── templates/
-        ├── base.html                 # Shared layout & navigation
-        ├── login.html                # JWT auth login page
-        ├── dashboard.html            # Stats, charts & overview
-        ├── leads.html                # Lead list with filters
-        ├── lead_detail.html          # Full lead CRM view
-        ├── lead_form.html            # Add new lead
-        ├── bookings.html             # All bookings
-        ├── followups.html            # Today's follow-ups
-        ├── tour_categories.html      # Category & sub-category manager
-        ├── reports.html              # Revenue & performance reports
-        ├── staff.html                # Staff management
-        └── activity.html             # Activity & audit logs
+        ├── base.html
+        ├── login.html
+        ├── dashboard.html
+        ├── leads.html
+        ├── lead_detail.html
+        ├── lead_form.html
+        ├── bookings.html
+        ├── followups.html
+        ├── tour_categories.html
+        ├── reports.html
+        ├── staff.html
+        └── activity.html
 ```
 
 ---
 
-## 🚀 Getting Started
+## ⚙️ Installation & Setup
 
-### 1. Clone the repo
+### 1️⃣ Clone Repository
+
 ```bash
-git clone https://github.com/yourusername/TourAndTravelCRM.git
+git clone https://github.com/chiragsingh9123/TourAndTravelCRM.git
 cd TourAndTravelCRM
 ```
 
-### 2. Install dependencies
+---
+
+### 2️⃣ Install Dependencies
+
 ```bash
 pip install flask flask-cors flask-jwt-extended mysql-connector-python bcrypt
 ```
 
-### 3. Set up the database
-```bash
-# Import all tables into MySQL
-mysql -u root -p travel_crm < db/travel_crm_users.sql
-mysql -u root -p travel_crm < db/travel_crm_leads.sql
-# ... repeat for all files in /db
+---
+
+### 3️⃣ Setup MySQL Database
+
+Create database:
+
+```sql
+CREATE DATABASE travel_crm;
 ```
 
-### 4. Configure DB credentials
-Open `backend/app.py` and update:
+Import tables:
+
+```bash
+mysql -u root -p travel_crm < db/travel_crm_users.sql
+mysql -u root -p travel_crm < db/travel_crm_leads.sql
+mysql -u root -p travel_crm < db/travel_crm_bookings.sql
+mysql -u root -p travel_crm < db/travel_crm_conversations.sql
+mysql -u root -p travel_crm < db/travel_crm_followups.sql
+mysql -u root -p travel_crm < db/travel_crm_packages.sql
+mysql -u root -p travel_crm < db/travel_crm_payments.sql
+mysql -u root -p travel_crm < db/travel_crm_activity_logs.sql
+```
+
+---
+
+### 4️⃣ Configure Database
+
+Edit `backend/app.py`:
+
 ```python
 DB_CONFIG = {
-    'host':     'localhost',
-    'user':     'root',
-    'password': '',
-    'database': 'travel_crm'
+    "host": "localhost",
+    "user": "root",
+    "password": "",
+    "database": "travel_crm"
 }
 ```
 
-### 5. Run the app
-```bash
-# Terminal 1 — API server
-python backend/app.py
+---
 
-# Terminal 2 — Frontend server
+### 5️⃣ Run Application
+
+```bash
+# Start Backend API
+python backend/app.py
+```
+
+```bash
+# Start Frontend
 python frontend/app.py
 ```
 
-Then open **http://localhost:5000** in your browser 🎉
+---
+
+### 🌐 Access App
+
+👉 http://localhost:5000
 
 ---
 
-## 🛠️ Tech Stack
+## 🧠 Architecture
 
-![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
-![Flask](https://img.shields.io/badge/Flask-000000?style=for-the-badge&logo=flask&logoColor=white)
-![MySQL](https://img.shields.io/badge/MySQL-4479A1?style=for-the-badge&logo=mysql&logoColor=white)
-![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)
-![HTML5](https://img.shields.io/badge/HTML5-E34F26?style=for-the-badge&logo=html5&logoColor=white)
-![JWT](https://img.shields.io/badge/JWT-000000?style=for-the-badge&logo=jsonwebtokens&logoColor=white)
-
----
-
-## 🔐 Default Roles
-
-| Role | Access |
-|------|--------|
-| **Admin** | Full access — users, reports, all leads |
-| **Manager** | Leads, bookings, reports, staff view |
-| **Staff** | Own assigned leads only |
+```
+Frontend (HTML + JS)
+        ↓
+Flask API (Backend)
+        ↓
+MySQL Database
+```
 
 ---
 
+## 🚀 Future Improvements
+
+* 🔄 Real-time notifications (WebSockets)
+* 📱 Mobile app version
+* 🌍 Multi-agency SaaS support
+* 🤖 AI-based lead scoring
+* 📊 Advanced analytics dashboard
+* 💳 Payment gateway integration
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome!
+
+```bash
+fork → clone → create branch → commit → push → PR
+```
+
+---
 
 ## 📄 License
 
-MIT License — feel free to use, modify & distribute.
+MIT License — free to use, modify & distribute.
+
+---
+
+## ❤️ Support
+
+If you like this project:
+
+⭐ Star the repo
+🍴 Fork it
+📢 Share with others
 
 ---
 
 <div align="center">
-  Made with ❤️ for Travel Agencies
+
+🔥 Built for Travel Businesses to Scale Faster 🚀
+
 </div>
