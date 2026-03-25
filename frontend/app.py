@@ -4,7 +4,7 @@ from flask import Flask, render_template, redirect, url_for
 
 app = Flask(__name__)
 
-API_BASE = "https://ayodhyatravels.online/api"
+API_BASE = "https://ayodhyatravels.online"
 
 @app.context_processor
 def inject_api():
