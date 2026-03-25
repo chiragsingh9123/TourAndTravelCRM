@@ -1,0 +1,43 @@
+name: 🚀 Deploy Travel CRM
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+            host: 76.13.243.16
+            username: root
+            key: ${{ secrets.SSH_KEY }}
+            port: 22          
+            script: |
+                echo "📂 Going to project folder"
+                cd /root/TourAndTravelCRM
+
+                echo "📥 Pull latest code"
+                git pull origin main
+
+                echo "🐍 Activate env & install dependencies"
+                source /root/env/bin/activate
+                pip install -r requirements.txt || true
+
+                echo "🔄 Restart services"
+                systemctl restart travelcrm-backend
+                systemctl restart travelcrm-frontend
+
+                echo "🧪 Checking status"
+                systemctl status travelcrm-backend --no-pager
+                systemctl status travelcrm-frontend --no-pager
+
+                echo "✅ Deployment complete"
+                curl -s "https://api.telegram.org/bot7896526546:AAEg81oRSVDI4m1y18XTPgsEiSDg1ouSuFo/sendMessage" \
+                -d "chat_id=7474379284" \
+                -d "text=✅ Deploy successful on VPS in TOUR AND TRAVELS (AYODHYA) 🚀"
+
