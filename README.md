@@ -76,16 +76,14 @@ It replaces messy Excel sheets, manual follow-ups, and scattered communication w
 
 ---
 
-## 🖼️ Screenshots (Add your images here)
+### Dashboard
+![Dashboard](screenshots/dashboard.png)
 
-```
-/screenshots/dashboard.png
-/screenshots/leads.png
-/screenshots/booking.png
-```
+### Leads
+![Leads](screenshots/leads.png)
 
-> 💡 Tip: Add screenshots to make your repo look 10x more professional
-
+### Booking
+![Booking](screenshots/booking.png)
 ---
 
 ## 🗂️ Project Structure
