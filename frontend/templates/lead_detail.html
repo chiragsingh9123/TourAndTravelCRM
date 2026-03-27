@@ -142,7 +142,6 @@
           <div class="form-grid">
             <div class="form-group">
               <label>Vehicle Type</label>
-              <!-- ✅ UPDATED: New vehicle options -->
               <select class="form-control" id="pkg_vehicle">
                 <optgroup label="Sedan / Hatchback">
                   <option value="Sedan">Sedan</option>
@@ -379,8 +378,6 @@
           <option>New Lead</option><option>Follow-up</option><option>Negotiation</option><option>Booked</option><option>Lost</option>
         </select>
       </div>
-
-      <!-- ✅ UPDATED: Hotel Category with new options -->
       <div class="form-group">
         <label>Hotel Category</label>
         <select class="form-control" id="edit-hotel-category">
@@ -392,8 +389,6 @@
           <option value="5 Star">5 Star</option>
         </select>
       </div>
-
-      <!-- ✅ UPDATED: Vehicle Type with new options -->
       <div class="form-group">
         <label>Vehicle Type</label>
         <select class="form-control" id="edit-vehicle-type">
@@ -502,10 +497,10 @@ let currentSubcatData = null;
 const RESULT_COLORS = {'Not Connected':'red','Call Not Picked':'red','Customer Busy':'yellow','Interested':'green','Call Later':'yellow','Not Interested':'red','Package Sent':'blue','Booking Confirmed':'green','Other':'purple'};
 const RESULT_ICONS  = {'Not Connected':'fa-phone-slash','Call Not Picked':'fa-phone-volume','Customer Busy':'fa-phone-flip','Interested':'fa-thumbs-up','Call Later':'fa-clock','Not Interested':'fa-thumbs-down','Package Sent':'fa-paper-plane','Booking Confirmed':'fa-check-circle','Other':'fa-comment'};
 
-// ✅ Hotel category options (centralised — used in addHotel() rows)
+// Hotel category options (centralised)
 const HOTEL_CATEGORIES = ['Standard','Deluxe','2 Star','3 Star','4 Star','5 Star'];
 
-// ✅ Vehicle type options (centralised — used wherever vehicles are listed)
+// Vehicle type options (centralised)
 const VEHICLE_OPTIONS = [
   { group: 'Sedan / Hatchback',  options: [{ value:'Sedan', label:'Sedan' }] },
   { group: 'MUV / SUV',          options: [
@@ -527,7 +522,6 @@ const VEHICLE_OPTIONS = [
   ]}
 ];
 
-// Helper: build <optgroup> HTML for a vehicle select
 function buildVehicleOptions(selectedValue) {
   return VEHICLE_OPTIONS.map(g =>
     `<optgroup label="${g.group}">${g.options.map(o =>
@@ -536,7 +530,6 @@ function buildVehicleOptions(selectedValue) {
   ).join('');
 }
 
-// Helper: build hotel-category <option> list
 function buildHotelCategoryOptions(selectedValue) {
   return HOTEL_CATEGORIES.map(c =>
     `<option value="${c}"${c===selectedValue?' selected':''}>${c}</option>`
@@ -570,6 +563,7 @@ async function loadLead() {
   renderCallStats(); renderPinnedNotes(); renderPayments(); renderWhatsAppLog();
 }
 
+// ── HEADER (with Delete button) ───────────────────────────────
 function renderHeader() {
   document.getElementById('lead-title').textContent = leadData.customer_name;
   document.getElementById('lead-meta').innerHTML = `
@@ -578,7 +572,20 @@ function renderHeader() {
     <span style="color:var(--text3);font-size:12px">Enquiry: ${formatDate(leadData.enquiry_date||leadData.created_at)}</span>`;
   document.getElementById('lead-actions').innerHTML = `
     <button class="btn btn-secondary btn-sm" onclick="duplicateLead()"><i class="fas fa-copy"></i> Duplicate</button>
-    <button class="btn btn-primary btn-sm" onclick="switchTab('booking')"><i class="fas fa-ticket"></i> Book Now</button>`;
+    <button class="btn btn-primary btn-sm" onclick="switchTab('booking')"><i class="fas fa-ticket"></i> Book Now</button>
+    <button class="btn btn-danger btn-sm" onclick="deleteLead()" style="background:var(--red);border-color:var(--red);color:#fff"><i class="fas fa-trash"></i> Delete</button>`;
+}
+
+// ── DELETE LEAD ───────────────────────────────────────────────
+async function deleteLead() {
+  if (!confirm(`Delete lead ${leadData.lead_id} for ${leadData.customer_name}?\n\nThis will permanently remove all conversations, packages, follow-ups, payments and notes.\n\nThis cannot be undone.`)) return;
+  try {
+    await apiFetch(`/api/leads/${LEAD_ID}`, { method: 'DELETE' });
+    toast('Lead deleted', 'success');
+    setTimeout(() => window.location.href = '/leads', 1000);
+  } catch(e) {
+    toast(e.message, 'error');
+  }
 }
 
 function renderCustomerCard() {
@@ -678,11 +685,10 @@ function renderPackages() {
     </div>`).join('');
 }
 
-// ── PACKAGE INIT + QUICK FILL ─────────────────────────────────
+// ── PACKAGE INIT ──────────────────────────────────────────────
 function initPackage() {
   currentPkgId=null; itineraryDays=[]; hotels=[]; otherCharges=[];
   document.getElementById('pkg_name').value = leadData.tour_name||'';
-  // ✅ Set vehicle from lead data, using the centralised select
   document.getElementById('pkg_vehicle').value = leadData.vehicle_type||'Sedan';
   document.getElementById('pkg_transport_cost').value='';
   document.getElementById('pkg_discount').value='0';
@@ -734,7 +740,6 @@ async function openEditModal() {
   document.getElementById('edit-tour').value = l.tour_name||'';
   document.getElementById('edit-travel-date').value = l.travel_date||'';
   document.getElementById('edit-status').value = l.status;
-  // ✅ Set hotel category and vehicle type
   document.getElementById('edit-hotel-category').value = l.hotel_category||'Standard';
   document.getElementById('edit-vehicle-type').value = l.vehicle_type||'Sedan';
   await populateCategoryDropdown(l.tour_category_id, l.tour_subcategory_id);
@@ -833,7 +838,6 @@ async function saveEdit() {
     tour_name: document.getElementById('edit-tour').value,
     travel_date: document.getElementById('edit-travel-date').value||null,
     status: document.getElementById('edit-status').value,
-    // ✅ Include updated hotel category and vehicle type
     hotel_category: document.getElementById('edit-hotel-category').value,
     vehicle_type: document.getElementById('edit-vehicle-type').value,
     tour_category_id: parseInt(document.getElementById('edit-tour-category').value)||null,
@@ -881,11 +885,12 @@ function addItineraryDay(){
   document.getElementById('itinerary-days').appendChild(div);
 }
 
-// ✅ UPDATED addHotel: now includes Hotel Category dropdown with new options
+// ── ADD HOTEL (with Rooms field) ──────────────────────────────
 function addHotel(){
-  const idx=hotels.length; hotels.push({city:'',name:'',category:'Standard',nights:1,price:0});
+  const idx=hotels.length;
+  hotels.push({city:'',name:'',category:'Standard',nights:1,rooms:1,price:0});
   const div=document.createElement('div');
-  div.style.cssText='display:grid;grid-template-columns:1fr 1fr 120px 60px 100px 36px;gap:6px;margin-bottom:8px;align-items:end';
+  div.style.cssText='display:grid;grid-template-columns:1fr 1fr 120px 55px 55px 110px 36px;gap:6px;margin-bottom:8px;align-items:end';
   div.innerHTML=`
     <div class="form-group" style="margin:0"><label style="font-size:10px">City</label><input type="text" class="form-control" placeholder="City" oninput="hotels[${idx}].city=this.value"></div>
     <div class="form-group" style="margin:0"><label style="font-size:10px">Hotel Name</label><input type="text" class="form-control" placeholder="Hotel name" oninput="hotels[${idx}].name=this.value"></div>
@@ -896,8 +901,9 @@ function addHotel(){
       </select>
     </div>
     <div class="form-group" style="margin:0"><label style="font-size:10px">Nights</label><input type="number" class="form-control" value="1" min="1" oninput="hotels[${idx}].nights=parseInt(this.value)||1;recalcTotal()"></div>
-    <div class="form-group" style="margin:0"><label style="font-size:10px">Price/Night (₹)</label><input type="number" class="form-control" placeholder="0" oninput="hotels[${idx}].price=parseInt(this.value)||0;recalcTotal()"></div>
-    <button class="btn btn-danger btn-sm" onclick="this.parentElement.remove();hotels.splice(${idx},1);recalcTotal()"><i class="fas fa-trash"></i></button>`;
+    <div class="form-group" style="margin:0"><label style="font-size:10px">Rooms</label><input type="number" class="form-control" value="1" min="1" oninput="hotels[${idx}].rooms=parseInt(this.value)||1;recalcTotal()"></div>
+    <div class="form-group" style="margin:0"><label style="font-size:10px">Price/Night/Room (₹)</label><input type="number" class="form-control" placeholder="0" oninput="hotels[${idx}].price=parseInt(this.value)||0;recalcTotal()"></div>
+    <button class="btn btn-danger btn-sm" style="margin-bottom:0" onclick="this.parentElement.remove();hotels.splice(${idx},1);recalcTotal()"><i class="fas fa-trash"></i></button>`;
   document.getElementById('hotel-list').appendChild(div);
 }
 
@@ -909,10 +915,11 @@ function addCharge(){
   document.getElementById('charges-list').appendChild(div);
 }
 
+// ── RECALC (rooms × nights × price) ──────────────────────────
 function recalcTotal(){
-  const hotelTotal=hotels.reduce((s,h)=>s+(h.price*h.nights),0);
+  const hotelTotal=hotels.reduce((s,h)=>s+(( parseInt(h.price)||0)*(parseInt(h.nights)||1)*(parseInt(h.rooms)||1)),0);
   const transport=parseInt(document.getElementById('pkg_transport_cost')?.value)||0;
-  const charges=otherCharges.reduce((s,c)=>s+c.amount,0);
+  const charges=otherCharges.reduce((s,c)=>s+(parseInt(c.amount)||0),0);
   const base=hotelTotal+transport+charges;
   const discount=parseInt(document.getElementById('pkg_discount')?.value)||0;
   document.getElementById('pkg_hotel_total').value=hotelTotal;
@@ -921,24 +928,76 @@ function recalcTotal(){
 }
 
 async function savePackage(){
-  const payload={tour_name:document.getElementById('pkg_name').value,itinerary:itineraryDays,hotels,transport:{type:document.getElementById('pkg_vehicle').value,price:parseInt(document.getElementById('pkg_transport_cost').value)||0},other_charges:otherCharges,base_price:parseInt(document.getElementById('pkg_base').value)||0,discount:parseInt(document.getElementById('pkg_discount').value)||0,final_price:parseInt(document.getElementById('pkg_final').value)||0,notes:document.getElementById('pkg_notes').value,tour_category_id:leadData.tour_category_id||null,tour_subcategory_id:leadData.tour_subcategory_id||null};
+  const payload={
+    tour_name:document.getElementById('pkg_name').value,
+    itinerary:itineraryDays,
+    hotels,
+    transport:{type:document.getElementById('pkg_vehicle').value,price:parseInt(document.getElementById('pkg_transport_cost').value)||0},
+    other_charges:otherCharges,
+    base_price:parseInt(document.getElementById('pkg_base').value)||0,
+    discount:parseInt(document.getElementById('pkg_discount').value)||0,
+    final_price:parseInt(document.getElementById('pkg_final').value)||0,
+    notes:document.getElementById('pkg_notes').value,
+    tour_category_id:leadData.tour_category_id||null,
+    tour_subcategory_id:leadData.tour_subcategory_id||null
+  };
   const url=currentPkgId?`/api/packages/${currentPkgId}`:`/api/leads/${LEAD_ID}/packages`;
   await apiFetch(url,{method:currentPkgId?'PUT':'POST',body:JSON.stringify(payload)});
   document.getElementById('package-form').style.display='none';
   toast('Package saved!','success'); await loadLead();
 }
 
+// ── LOAD PACKAGE FOR EDIT (restores all fields incl. rooms) ───
 async function loadPackageForEdit(pkgId){
   const p=await apiFetch(`/api/packages/${pkgId}`); if(!p) return;
   currentPkgId=pkgId;
-  document.getElementById('pkg_name').value=p.tour_name||'';
-  itineraryDays=p.itinerary||[]; hotels=p.hotels||[]; otherCharges=p.other_charges||[];
-  document.getElementById('pkg_transport_cost').value=p.transport?.price||0;
-  document.getElementById('pkg_vehicle').value=p.transport?.type||'Sedan';
-  document.getElementById('pkg_discount').value=p.discount||0;
-  document.getElementById('pkg_notes').value=p.notes||'';
-  document.getElementById('itinerary-days').innerHTML=''; itineraryDays.forEach(()=>addItineraryDay());
-  document.getElementById('hotel-list').innerHTML=''; hotels.forEach(()=>addHotel());
+
+  document.getElementById('pkg_name').value        = p.tour_name||'';
+  document.getElementById('pkg_transport_cost').value = p.transport?.price||0;
+  document.getElementById('pkg_vehicle').value     = p.transport?.type||'Sedan';
+  document.getElementById('pkg_discount').value    = p.discount||0;
+  document.getElementById('pkg_notes').value       = p.notes||'';
+
+  // Restore itinerary
+  itineraryDays = p.itinerary||[];
+  document.getElementById('itinerary-days').innerHTML='';
+  itineraryDays.forEach((day, i) => {
+    addItineraryDay();
+    const inputs = document.getElementById('itinerary-days').querySelectorAll('input[type="text"]');
+    if (inputs[i]) inputs[i].value = day.description||'';
+    itineraryDays[i].description = day.description||'';
+  });
+
+  // Restore hotels (including rooms)
+  hotels = p.hotels||[];
+  document.getElementById('hotel-list').innerHTML='';
+  hotels.forEach((h, idx) => {
+    addHotel();
+    const row = document.getElementById('hotel-list').children[idx];
+    if (!row) return;
+    const inputs = row.querySelectorAll('input[type="text"], input[type="number"]');
+    // inputs order: city(text), hotelName(text), nights(number), rooms(number), price(number)
+    if (inputs[0]) { inputs[0].value = h.city||'';   hotels[idx].city  = h.city||''; }
+    if (inputs[1]) { inputs[1].value = h.name||'';   hotels[idx].name  = h.name||''; }
+    if (inputs[2]) { inputs[2].value = h.nights||1;  hotels[idx].nights = parseInt(h.nights)||1; }
+    if (inputs[3]) { inputs[3].value = h.rooms||1;   hotels[idx].rooms  = parseInt(h.rooms)||1; }
+    if (inputs[4]) { inputs[4].value = h.price||0;   hotels[idx].price  = parseInt(h.price)||0; }
+    const sel = row.querySelector('select');
+    if (sel) { sel.value = h.category||'Standard'; hotels[idx].category = h.category||'Standard'; }
+  });
+
+  // Restore other charges
+  otherCharges = p.other_charges||[];
+  document.getElementById('charges-list').innerHTML='';
+  otherCharges.forEach((c, idx) => {
+    addCharge();
+    const row = document.getElementById('charges-list').children[idx];
+    if (!row) return;
+    const inputs = row.querySelectorAll('input');
+    if (inputs[0]) { inputs[0].value = c.name||'';   otherCharges[idx].name   = c.name||''; }
+    if (inputs[1]) { inputs[1].value = c.amount||0;  otherCharges[idx].amount = parseInt(c.amount)||0; }
+  });
+
   document.getElementById('package-form').style.display='block';
   updateQuickFillBar(); recalcTotal(); switchTab('package');
 }
@@ -1007,78 +1066,69 @@ function renderWhatsAppLog(){
   if(!msgs.length){el.innerHTML='<div style="color:var(--text3);text-align:center;padding:20px;font-size:13px">No messages logged yet</div>';return;}
   el.innerHTML=msgs.map(m=>`<div style="padding:10px 0;border-bottom:1px solid var(--border)"><div style="background:var(--surface2);border-radius:8px;padding:8px 12px;max-width:90%;font-size:13px;white-space:pre-wrap">${m.message}</div><div style="font-size:10px;color:var(--text3);margin-top:4px">${m.staff_name} · ${timeAgo(m.created_at)}</div></div>`).join('');
 }
+
 function applyWATemplate(key){const fn=WA_TEMPLATES[key];if(fn)document.getElementById('wa_message').value=fn();}
+
 function sendWhatsApp(){
   const msg=document.getElementById('wa_message').value.trim();
   if(!msg){toast('Please enter a message','error');return;}
   window.open(`https://wa.me/91${leadData.mobile.replace(/\D/g,'')}?text=${encodeURIComponent(msg)}`,'_blank');
   logWhatsApp();
 }
+
 async function logWhatsApp(){
   const msg=document.getElementById('wa_message').value.trim();
   if(!msg){toast('Please enter a message to log','error');return;}
   try{await apiFetch(`/api/leads/${LEAD_ID}/whatsapp`,{method:'POST',body:JSON.stringify({message:msg})});toast('Message logged!','success');document.getElementById('wa_message').value='';await loadLead();switchTab('whatsapp');}catch(e){toast(e.message,'error');}
 }
+
 function sharePackageWhatsApp(pkgId){
   const pkg = leadData.packages.find(p => p.id === pkgId);
   if (!pkg) return;
 
-  // Parse hotels/transport if they came back as JSON strings
-  const hotels   = typeof pkg.hotels    === 'string' ? JSON.parse(pkg.hotels    || '[]') : (pkg.hotels    || []);
-  const transport = typeof pkg.transport === 'string' ? JSON.parse(pkg.transport || '{}') : (pkg.transport || {});
-  const charges   = typeof pkg.other_charges === 'string' ? JSON.parse(pkg.other_charges || '[]') : (pkg.other_charges || []);
+  const hotelsList  = typeof pkg.hotels       === 'string' ? JSON.parse(pkg.hotels       || '[]') : (pkg.hotels       || []);
+  const transport   = typeof pkg.transport    === 'string' ? JSON.parse(pkg.transport    || '{}') : (pkg.transport    || {});
+  const charges     = typeof pkg.other_charges === 'string' ? JSON.parse(pkg.other_charges || '[]') : (pkg.other_charges || []);
 
-  // Hotel lines — city, name, category, nights × price = subtotal
-  const hotelLines = hotels.length
-    ? hotels.map(h => {
-        const nights    = parseInt(h.nights) || 1;
-        const perNight  = parseInt(h.price)  || 0;
-        const subtotal  = nights * perNight;
-        const catLabel  = h.category ? ` [${h.category}]` : '';
+  const hotelLines = hotelsList.length
+    ? hotelsList.map(h => {
+        const nights   = parseInt(h.nights) || 1;
+        const rooms    = parseInt(h.rooms)  || 1;
+        const perNight = parseInt(h.price)  || 0;
+        const subtotal = nights * rooms * perNight;
+        const catLabel = h.category ? ` [${h.category}]` : '';
+        const roomsLabel = rooms > 1 ? ` × ${rooms} rooms` : '';
         return `  • ${h.city}: ${h.name}${catLabel}\n` +
-               `    ${nights}N × ₹${perNight.toLocaleString('en-IN')} = ₹${subtotal.toLocaleString('en-IN')}`;
+               `    ${nights}N${roomsLabel} × ₹${perNight.toLocaleString('en-IN')}/room = ₹${subtotal.toLocaleString('en-IN')}`;
       }).join('\n')
     : '  (No hotels added)';
 
-  // Transport line
   const transportCost = parseInt(transport.price) || 0;
   const transportLine = transport.type
     ? `  • ${transport.type}: ₹${transportCost.toLocaleString('en-IN')}`
     : '  (No transport)';
 
-  // Other charges lines
   const chargeLines = charges.length
     ? charges.map(c => `  • ${c.name}: ₹${(parseInt(c.amount)||0).toLocaleString('en-IN')}`).join('\n')
     : '';
 
-  // Price summary
-  const basePrice   = parseInt(pkg.base_price)  || 0;
-  const discount    = parseInt(pkg.discount)     || 0;
-  const finalPrice  = parseInt(pkg.final_price)  || 0;
+  const basePrice  = parseInt(pkg.base_price)  || 0;
+  const discount   = parseInt(pkg.discount)    || 0;
+  const finalPrice = parseInt(pkg.final_price) || 0;
 
   document.getElementById('wa_message').value =
     `🌟 *Tour Package: ${pkg.tour_name}*\n\n` +
     `Dear ${leadData.customer_name}ji,\n\n` +
-
     `🏨 *Hotels:*\n${hotelLines}\n\n` +
-
     `🚗 *Transport:*\n${transportLine}\n` +
-
-    (chargeLines
-      ? `\n🧾 *Other Charges:*\n${chargeLines}\n`
-      : '') +
-
+    (chargeLines ? `\n🧾 *Other Charges:*\n${chargeLines}\n` : '') +
     `\n━━━━━━━━━━━━━━━━\n` +
     `📊 *Price Breakdown:*\n` +
     `  Base Price : ₹${basePrice.toLocaleString('en-IN')}\n` +
-    (discount > 0
-      ? `  Discount   : -₹${discount.toLocaleString('en-IN')}\n`
-      : '') +
+    (discount > 0 ? `  Discount   : -₹${discount.toLocaleString('en-IN')}\n` : '') +
     `  *Final Price: ₹${finalPrice.toLocaleString('en-IN')}*\n` +
     `━━━━━━━━━━━━━━━━\n` +
-
     (pkg.notes ? `\n📝 *Notes:*\n${pkg.notes}\n` : '') +
-
     `\nPlease confirm your booking! 🙏\n📞 Contact us for any queries.`;
 
   switchTab('whatsapp');
@@ -1124,12 +1174,15 @@ function renderPinnedNotes(){
   const C={yellow:'#F59E0B',blue:'#3B82F6',green:'#10B981',red:'#EF4444'};
   el.innerHTML=notes.map(n=>`<div style="display:flex;gap:8px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--border)"><div style="width:4px;min-height:36px;border-radius:4px;background:${C[n.color]||C.yellow};flex-shrink:0"></div><div style="flex:1;font-size:12px">${n.note}</div><button class="btn btn-sm" style="padding:2px 6px;font-size:10px;color:var(--text3)" onclick="deleteNote(${n.id})"><i class="fas fa-times"></i></button></div>`).join('');
 }
+
 function openAddNoteModal(){document.getElementById('note-text').value='';selectNoteColor('yellow');document.getElementById('note-modal').classList.add('show');}
 function selectNoteColor(color){selectedNoteColor=color;['yellow','blue','green','red'].forEach(c=>{const el=document.getElementById('nc-'+c);if(el)el.querySelector('i').style.display=(c===color)?'block':'none';});}
+
 async function saveNote(){
   const note=document.getElementById('note-text').value.trim();if(!note){toast('Please enter a note','error');return;}
   try{await apiFetch(`/api/leads/${LEAD_ID}/notes`,{method:'POST',body:JSON.stringify({note,color:selectedNoteColor})});toast('Note pinned!','success');closeModal('note-modal');await loadLead();}catch(e){toast(e.message,'error');}
 }
+
 async function deleteNote(noteId){
   if(!confirm('Delete this note?')) return;
   try{await apiFetch(`/api/notes/${noteId}`,{method:'DELETE'});toast('Note deleted','success');await loadLead();}catch(e){toast(e.message,'error');}
@@ -1149,15 +1202,18 @@ function renderHistory(){
   if(!leadData.history||!leadData.history.length){el.innerHTML='<div class="empty-state"><i class="fas fa-history"></i><h3>No previous records</h3><p>First enquiry for this mobile number</p></div>';return;}
   el.innerHTML=leadData.history.map(h=>`<a href="/leads/${h.id}" style="display:block;padding:12px;border-bottom:1px solid var(--border);text-decoration:none;color:var(--text)"><div style="display:flex;justify-content:space-between;align-items:center"><div><code style="color:var(--accent);font-size:11px">${h.lead_id}</code><div style="font-size:13px;margin-top:2px">${h.tour_name||'No tour specified'}</div></div><div style="text-align:right">${statusBadge(h.status)}<div style="font-size:11px;color:var(--text3);margin-top:4px">${formatDate(h.created_at)}</div></div></div></a>`).join('');
 }
+
 function renderFollowups(){
   const el=document.getElementById('upcoming-followups');
   const pending=(leadData.followups||[]).filter(f=>f.status==='Pending');
   if(!pending.length){el.innerHTML='<div style="color:var(--text3);font-size:12px;text-align:center;padding:12px">No upcoming follow-ups</div>';return;}
   el.innerHTML=pending.map(f=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)"><div><div style="font-size:12px;font-weight:600">${formatDate(f.followup_date)}</div><div style="font-size:11px;color:var(--text3)">${f.notes||''}</div></div><button class="btn btn-sm btn-success" onclick="completeFollowup(${f.id})"><i class="fas fa-check"></i></button></div>`).join('');
 }
+
 async function completeFollowup(id){await apiFetch(`/api/followups/${id}/complete`,{method:'POST'});toast('Follow-up completed','success');await loadLead();}
 
 function closeModal(id){document.getElementById(id).classList.remove('show');}
+
 function switchTab(name){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('[id^="tab-"]').forEach(t=>t.style.display='none');

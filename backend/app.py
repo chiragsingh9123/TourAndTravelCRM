@@ -340,7 +340,38 @@ def get_lead(lid):
     lead['history']        = history or []
     return jsonify(lead)
 
-
+@app.route('/api/leads/<int:lid>', methods=['DELETE'])
+@jwt_required()
+def delete_lead(lid):
+    identity = json.loads(get_jwt_identity())
+    if identity['role'] not in ('admin', 'manager'):
+        return jsonify({'error': 'Forbidden — only admin/manager can delete leads'}), 403
+    
+    lead = db_query("SELECT lead_id FROM leads WHERE id=%s", (lid,))
+    if not lead:
+        return jsonify({'error': 'Not found'}), 404
+    lead_id_str = lead[0]['lead_id']
+    
+    # Cascade: delete child records first (FK safety for tables without ON DELETE CASCADE)
+    db_execute("DELETE FROM followups WHERE lead_id=%s", (lid,))
+    db_execute("DELETE FROM conversations WHERE lead_id=%s", (lid,))
+    db_execute("DELETE FROM packages WHERE lead_id=%s", (lid,))
+    db_execute("DELETE FROM whatsapp_logs WHERE lead_id=%s", (lid,))
+    db_execute("DELETE FROM lead_notes WHERE lead_id=%s", (lid,))
+    
+    # Delete payments tied to this lead's booking
+    booking = db_query("SELECT id FROM bookings WHERE lead_id=%s", (lid,))
+    if booking:
+        db_execute("DELETE FROM payments WHERE booking_id=%s", (booking[0]['id'],))
+    db_execute("DELETE FROM bookings WHERE lead_id=%s", (lid,))
+    
+    db_execute("DELETE FROM leads WHERE id=%s", (lid,))
+    
+    db_execute(
+        "INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details) VALUES (%s,'DELETE_LEAD','lead',%s,%s)",
+        (identity['id'], lid, f"Deleted lead {lead_id_str}")
+    )
+    return jsonify({'message': f'Lead {lead_id_str} deleted'})
 
 
 @app.route('/api/leads/<int:lid>', methods=['PUT'])
