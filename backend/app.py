@@ -33,6 +33,29 @@ def get_db():
         print(f"DB Error: {e}")
         return None
 
+# def db_query(sql, params=None, fetch=True):
+#     conn = get_db()
+#     if not conn:
+#         return None
+#     try:
+#         cursor = conn.cursor(dictionary=True, buffered=True)
+#         cursor.execute(sql, params or ())
+#         if fetch:
+#             result = cursor.fetchall()
+#         else:
+#             conn.commit()
+#             result = cursor.lastrowid
+#         cursor.close()
+#         conn.close()
+#         return result
+#     except Error as e:
+#         print(f"Query Error: {e}")
+#         if conn:
+#             conn.close()
+#         return None
+
+
+
 def db_query(sql, params=None, fetch=True):
     conn = get_db()
     if not conn:
@@ -44,7 +67,12 @@ def db_query(sql, params=None, fetch=True):
             result = cursor.fetchall()
         else:
             conn.commit()
-            result = cursor.lastrowid
+            result = cursor.lastrowid  # ← this should now work with buffered=True
+            # ✅ Nuclear fallback if lastrowid still returns 0 or None
+            if not result:
+                cursor.execute("SELECT LAST_INSERT_ID() AS id")
+                row = cursor.fetchone()
+                result = row['id'] if row else None
         cursor.close()
         conn.close()
         return result
@@ -53,6 +81,7 @@ def db_query(sql, params=None, fetch=True):
         if conn:
             conn.close()
         return None
+    
 
 def db_execute(sql, params=None):
     return db_query(sql, params, fetch=False)
