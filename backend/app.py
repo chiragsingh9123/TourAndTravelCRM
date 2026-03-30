@@ -151,9 +151,21 @@ def delete_user(uid):
 # ─── LEADS ───────────────────────────────────────────────────
 def next_lead_id():
     year = datetime.now().year
-    row = db_query("SELECT COUNT(*) as cnt FROM leads WHERE YEAR(created_at)=%s", (year,))
-    n = (row[0]['cnt'] if row else 0) + 1
-    return f"LEAD-{year}-{n:05d}"
+
+    row = db_query("""
+        SELECT lead_id FROM leads
+        WHERE lead_id LIKE %s
+        ORDER BY id DESC LIMIT 1
+    """, (f"LEAD-{year}-%",))
+
+    if row and row[0]['lead_id']:
+        last_id = row[0]['lead_id']
+        last_num = int(last_id.split('-')[-1])
+        next_num = last_num + 1
+    else:
+        next_num = 1
+
+    return f"LEAD-{year}-{next_num:05d}"
 
 @app.route('/api/leads', methods=['GET'])
 @jwt_required()
