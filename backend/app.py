@@ -33,29 +33,6 @@ def get_db():
         print(f"DB Error: {e}")
         return None
 
-# def db_query(sql, params=None, fetch=True):
-#     conn = get_db()
-#     if not conn:
-#         return None
-#     try:
-#         cursor = conn.cursor(dictionary=True, buffered=True)
-#         cursor.execute(sql, params or ())
-#         if fetch:
-#             result = cursor.fetchall()
-#         else:
-#             conn.commit()
-#             result = cursor.lastrowid
-#         cursor.close()
-#         conn.close()
-#         return result
-#     except Error as e:
-#         print(f"Query Error: {e}")
-#         if conn:
-#             conn.close()
-#         return None
-
-
-
 def db_query(sql, params=None, fetch=True):
     conn = get_db()
     if not conn:
@@ -67,12 +44,7 @@ def db_query(sql, params=None, fetch=True):
             result = cursor.fetchall()
         else:
             conn.commit()
-            result = cursor.lastrowid  # ← this should now work with buffered=True
-            # ✅ Nuclear fallback if lastrowid still returns 0 or None
-            if not result:
-                cursor.execute("SELECT LAST_INSERT_ID() AS id")
-                row = cursor.fetchone()
-                result = row['id'] if row else None
+            result = cursor.lastrowid
         cursor.close()
         conn.close()
         return result
@@ -80,8 +52,8 @@ def db_query(sql, params=None, fetch=True):
         print(f"Query Error: {e}")
         if conn:
             conn.close()
-        return None
-    
+        raise   # 🔥 THIS IS THE FIX
+
 
 def db_execute(sql, params=None):
     return db_query(sql, params, fetch=False)
@@ -226,33 +198,152 @@ def get_leads():
     )
     return jsonify({'leads': leads or [], 'total': total, 'page': page, 'per_page': per_page})
 
+
+
+
 @app.route('/api/leads', methods=['POST'])
 @jwt_required()
 def create_lead():
-    identity = json.loads(get_jwt_identity())
-    data = request.get_json()
-    lead_id = next_lead_id()
+    try:
+        identity = json.loads(get_jwt_identity())
+        data = request.get_json()
+
+        if not data:
+            return jsonify({'error': 'Invalid JSON'}), 400
+
+        # ─── REQUIRED FIELDS ─────────────────────────────
+        if not data.get('customer_name') or not data.get('mobile'):
+            return jsonify({'error': 'customer_name and mobile are required'}), 400
+
+        # ─── GENERATE LEAD ID ────────────────────────────
+        lead_id = next_lead_id()
+
+        # ─── DATE HANDLING ───────────────────────────────
+        from datetime import datetime
+
+        travel_date = data.get('travel_date')
+        if travel_date:
+            try:
+                travel_date = datetime.strptime(travel_date, "%Y-%m-%d").date()
+            except:
+                return jsonify({'error': 'Invalid travel_date format (use YYYY-MM-DD)'}), 400
+
+        enquiry_date = data.get('enquiry_date')
+        if enquiry_date:
+            try:
+                enquiry_date = datetime.strptime(enquiry_date, "%Y-%m-%d").date()
+            except:
+                return jsonify({'error': 'Invalid enquiry_date format (use YYYY-MM-DD)'}), 400
+        else:
+            enquiry_date = datetime.now().date()
+
+        # ─── ENUM SAFE VALUES ────────────────────────────
+        hotel_category = data.get('hotel_category')
+        if hotel_category not in ['Budget','Deluxe','Premium']:
+            hotel_category = 'Budget'
+
+        meal_plan = data.get('meal_plan')
+        if meal_plan not in ['CP','MAP','AP','EP']:
+            meal_plan = 'MAP'
+
+        vehicle_type = data.get('vehicle_type')
+        if vehicle_type not in ['Sedan','SUV','Innova','Tempo Traveller','Mini Bus','Bus']:
+            vehicle_type = 'Sedan'
+
+        lead_source = data.get('lead_source')
+        if lead_source not in ['Call','Website','WhatsApp','Referral','Walk-in','Other']:
+            lead_source = 'Call'
+
+        status = data.get('status')
+        if status not in ['New Lead','Follow-up','Negotiation','Booked','Lost']:
+            status = 'New Lead'
+
+        # ─── ASSIGNED USER VALIDATION ────────────────────
+        assigned_to = data.get('assigned_to') or identity['id']
+
+        user_check = db_query("SELECT id FROM users WHERE id=%s", (assigned_to,))
+        if not user_check:
+            return jsonify({'error': f'Invalid assigned_to user id: {assigned_to}'}), 400
+
+        # ─── INSERT ──────────────────────────────────────
+        lid = db_execute("""
+            INSERT INTO leads (
+                lead_id, customer_name, mobile, alt_mobile, email, city,
+                tour_name, travel_date, pickup_location, drop_location,
+                adults, children, hotel_category, meal_plan,
+                vehicle_type, lead_source, assigned_to, status, enquiry_date, notes
+            )
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        """, (
+            lead_id,
+            data.get('customer_name'),
+            data.get('mobile'),
+            data.get('alt_mobile'),
+            data.get('email'),
+            data.get('city'),
+            data.get('tour_name'),
+            travel_date,
+            data.get('pickup_location'),
+            data.get('drop_location'),
+            data.get('adults', 1),
+            data.get('children', 0),
+            hotel_category,
+            meal_plan,
+            vehicle_type,
+            lead_source,
+            assigned_to,
+            status,
+            enquiry_date,
+            data.get('notes')
+        ))
+
+        if not lid:
+            return jsonify({'error': 'Insert failed (DB error)'}), 500
+
+        # ─── LOG ACTIVITY ────────────────────────────────
+        db_execute("""
+            INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details)
+            VALUES (%s,'CREATE_LEAD','lead',%s,%s)
+        """, (identity['id'], lid, f"Created lead {lead_id}"))
+
+        return jsonify({
+            'id': lid,
+            'lead_id': lead_id,
+            'message': 'Lead created successfully'
+        }), 201
+
+    except Exception as e:
+        print("CREATE LEAD ERROR:", str(e))
+        return jsonify({'error': str(e)}), 500
+
+
+# @app.route('/api/leads', methods=['POST'])
+# @jwt_required()
+# def create_lead():
+#     identity = json.loads(get_jwt_identity())
+#     data = request.get_json()
+#     lead_id = next_lead_id()
     
-    lid = db_execute("""
-        INSERT INTO leads (lead_id, customer_name, mobile, alt_mobile, email, city,
-            tour_name, travel_date, pickup_location, drop_location,
-            adults, children, hotel_category, meal_plan,
-            vehicle_type, lead_source, assigned_to, status, enquiry_date, notes)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-    """, (
-        lead_id, data.get('customer_name'), data.get('mobile'), data.get('alt_mobile',''),
-        data.get('email',''), data.get('city',''), data.get('tour_name'),
-        data.get('travel_date'), data.get('pickup_location',''), data.get('drop_location',''),
-        data.get('adults',1), data.get('children',0),
-        data.get('hotel_category','Budget'), data.get('meal_plan','MAP'),
-        data.get('vehicle_type','Sedan'), data.get('lead_source','Call'),
-        data.get('assigned_to', identity['id']),
-        data.get('status','New Lead'), data.get('enquiry_date', datetime.now().date()),
-        data.get('notes','')
-    ))
-    db_execute("INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details) VALUES (%s,'CREATE_LEAD','lead',%s,%s)",
-               (identity['id'], lid, f"Created lead {lead_id}"))
-    return jsonify({'id': lid, 'lead_id': lead_id, 'message': 'Lead created'}), 201
+#     lid = db_execute("""
+#         INSERT INTO leads (lead_id, customer_name, mobile, alt_mobile, email, city,
+#             tour_name, travel_date, pickup_location, drop_location,
+#             adults, children, hotel_category, meal_plan,
+#             vehicle_type, lead_source, assigned_to, status, enquiry_date, notes)
+#         VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+#     """, (
+#         lead_id, data.get('customer_name'), data.get('mobile'), data.get('alt_mobile',''),
+#         data.get('email',''), data.get('city',''), data.get('tour_name'),
+#         data.get('travel_date'), data.get('pickup_location',''), data.get('drop_location',''),
+#         data.get('adults',1), data.get('children',0),
+#         data.get('hotel_category','Budget'), data.get('meal_plan','MAP'),
+#         data.get('vehicle_type','Sedan'), data.get('lead_source','Call'),
+#         data.get('assigned_to', identity['id']),
+#         data.get('status','New Lead'), data.get('enquiry_date', datetime.now().date()),
+#         data.get('notes','')
+#     ))
+#     db_execute("INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details) VALUES (%s,'CREATE_LEAD','lead',%s,%s)",
+#                (identity['id'], lid, f"Created lead {lead_id}"))
+#     return jsonify({'id': lid, 'lead_id': lead_id, 'message': 'Lead created'}), 201
 
 
 
