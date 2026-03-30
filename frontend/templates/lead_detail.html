@@ -1,3 +1,103 @@
+<!-- CHANGES SUMMARY:
+1. Hotel section: Added "Extra Bed" column with count + type (Double/Triple/Single)
+2. Hotel bed type: Double Bed / Triple Bed / Single Bed options
+3. Timeline: Removed call_duration input; simplified Call Result to: Interested, Not Interested, Package Sent, Booking Confirmed, Cancel, Customer Busy
+4. Taxi Service subcategory: Added Muktinath Permits, Muktinath Taxi
+5. Soft-delete leads with restore functionality (DELETE sets is_deleted=1, new /api/leads/<id>/restore endpoint)
+6. Fixed double conversation insert bug; improved next follow-up date highlight color
+-->
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SECTION A: app.py CHANGES
+     ═══════════════════════════════════════════════════════════════ -->
+
+<!-- ─── CHANGE 5a: Update delete_lead route for soft delete ─── -->
+<!--
+REPLACE the existing delete_lead route with:
+
+@app.route('/api/leads/<int:lid>', methods=['DELETE'])
+@jwt_required()
+def delete_lead(lid):
+    identity = json.loads(get_jwt_identity())
+    if identity['role'] not in ('admin', 'manager'):
+        return jsonify({'error': 'Forbidden — only admin/manager can delete leads'}), 403
+    
+    lead = db_query("SELECT lead_id FROM leads WHERE id=%s AND is_deleted=0", (lid,))
+    if not lead:
+        return jsonify({'error': 'Not found'}), 404
+    lead_id_str = lead[0]['lead_id']
+    
+    db_execute("UPDATE leads SET is_deleted=1, deleted_at=NOW(), deleted_by=%s WHERE id=%s",
+               (identity['id'], lid))
+    
+    db_execute(
+        "INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details) VALUES (%s,'SOFT_DELETE_LEAD','lead',%s,%s)",
+        (identity['id'], lid, f"Soft-deleted lead {lead_id_str}")
+    )
+    return jsonify({'message': f'Lead {lead_id_str} moved to trash'})
+
+
+ADD new restore route:
+
+@app.route('/api/leads/<int:lid>/restore', methods=['POST'])
+@jwt_required()
+def restore_lead(lid):
+    identity = json.loads(get_jwt_identity())
+    if identity['role'] not in ('admin', 'manager'):
+        return jsonify({'error': 'Forbidden'}), 403
+    
+    lead = db_query("SELECT lead_id FROM leads WHERE id=%s AND is_deleted=1", (lid,))
+    if not lead:
+        return jsonify({'error': 'Not found or not deleted'}), 404
+    
+    db_execute("UPDATE leads SET is_deleted=0, deleted_at=NULL, deleted_by=NULL WHERE id=%s", (lid,))
+    db_execute(
+        "INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details) VALUES (%s,'RESTORE_LEAD','lead',%s,%s)",
+        (identity['id'], lid, f"Restored lead {lead[0]['lead_id']}")
+    )
+    return jsonify({'message': f"Lead {lead[0]['lead_id']} restored"})
+
+
+ADD trash list route:
+
+@app.route('/api/leads/trash', methods=['GET'])
+@jwt_required()
+def get_trash():
+    identity = json.loads(get_jwt_identity())
+    if identity['role'] not in ('admin', 'manager'):
+        return jsonify({'error': 'Forbidden'}), 403
+    leads = db_query("""
+        SELECT l.*, u.full_name as assigned_name, d.full_name as deleted_by_name
+        FROM leads l
+        LEFT JOIN users u ON l.assigned_to=u.id
+        LEFT JOIN users d ON l.deleted_by=d.id
+        WHERE l.is_deleted=1
+        ORDER BY l.deleted_at DESC
+    """)
+    return jsonify(leads or [])
+
+
+UPDATE get_leads to exclude deleted:
+In the get_leads WHERE clause add:  where.append("l.is_deleted=0")  (or add AND l.is_deleted=0 to where_str fallback)
+Also update get_lead to: WHERE l.id=%s AND l.is_deleted=0
+
+
+DATABASE MIGRATION (run once):
+ALTER TABLE leads
+    ADD COLUMN IF NOT EXISTS is_deleted TINYINT(1) DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS deleted_at DATETIME DEFAULT NULL,
+    ADD COLUMN IF NOT EXISTS deleted_by INT DEFAULT NULL;
+
+-- Add to Taxi Service subcategories:
+INSERT INTO tour_subcategories (category_id, name, tags) VALUES
+((SELECT id FROM tour_categories WHERE name='Taxi Service'), 'Muktinath Permits', 'Muktinath, Nepal, Permit'),
+((SELECT id FROM tour_categories WHERE name='Taxi Service'), 'Muktinath Taxi',    'Muktinath, Nepal, Taxi');
+-->
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SECTION B: lead_detail.html FULL UPDATED TEMPLATE
+     ═══════════════════════════════════════════════════════════════ -->
+
 {% extends "base.html" %}
 {% block title %}Lead Detail — Travel CRM{% endblock %}
 
@@ -26,28 +126,32 @@
       <div class="tab" onclick="switchTab('history')"><i class="fas fa-history"></i> History</div>
     </div>
 
-    <!-- Timeline Tab -->
+    <!-- ─── CHANGE 3: Timeline Tab – removed call_duration, simplified Call Result ─── -->
     <div id="tab-timeline">
       <div class="card" style="margin-bottom:16px">
         <div class="card-title"><i class="fas fa-plus"></i> Add Conversation</div>
         <div class="form-grid" style="grid-template-columns:1fr 1fr">
           <div class="form-group">
             <label>Call Type</label>
-            <select class="form-control" id="call_type"><option>Outgoing</option><option>Incoming</option></select>
+            <select class="form-control" id="call_type">
+              <option>Outgoing</option>
+              <option>Incoming</option>
+            </select>
           </div>
+          <!-- CHANGE 3: Simplified call results only -->
           <div class="form-group">
             <label>Call Result *</label>
             <select class="form-control" id="call_result">
               <option value="">Select result...</option>
-              <option>Not Connected</option><option>Call Not Picked</option><option>Customer Busy</option>
-              <option>Interested</option><option>Call Later</option><option>Not Interested</option>
-              <option>Package Sent</option><option>Booking Confirmed</option><option>Other</option>
+              <option value="Interested">Interested</option>
+              <option value="Not Interested">Not Interested</option>
+              <option value="Package Sent">Package Sent</option>
+              <option value="Booking Confirmed">Booking Confirmed</option>
+              <option value="Cancel">Cancel</option>
+              <option value="Customer Busy">Customer Busy</option>
             </select>
           </div>
-          <div class="form-group">
-            <label>Call Duration (mins)</label>
-            <input type="number" class="form-control" id="call_duration" min="0" placeholder="e.g. 5">
-          </div>
+          <!-- CHANGE 3: call_duration INPUT REMOVED -->
           <div class="form-group">
             <label>Next Follow-up Date</label>
             <input type="date" class="form-control" id="next_followup_date">
@@ -85,7 +189,6 @@
           <button class="btn btn-primary btn-sm" onclick="initPackage()"><i class="fas fa-plus"></i> New Package</button>
         </div>
 
-        <!-- Category Banner -->
         <div id="pkg-category-banner" style="display:none; background:rgba(249,115,22,.06); border:1px solid rgba(249,115,22,.2); border-radius:10px; padding:12px 14px; margin-bottom:14px">
           <div style="font-size:11px; color:var(--text3); margin-bottom:6px; font-weight:600; text-transform:uppercase; letter-spacing:.4px">
             <i class="fas fa-layer-group"></i> Tour Category (linked to this lead)
@@ -106,7 +209,6 @@
       <div class="card" id="package-form" style="display:none">
         <div class="form-section-title"><i class="fas fa-edit"></i> Package Details</div>
 
-        <!-- Quick Fill bar -->
         <div id="pkg-quick-fill-bar" style="display:none; background:var(--surface2); border-radius:8px; padding:10px 14px; margin-bottom:14px; font-size:13px; display:flex; align-items:center; gap:8px; flex-wrap:wrap">
           <i class="fas fa-magic" style="color:var(--accent)"></i>
           <span>Quick Fill from sub-category: <strong id="pkg-quick-fill-name" style="color:var(--accent)"></strong></span>
@@ -127,13 +229,17 @@
           <div id="itinerary-days"></div>
         </div>
 
-        <!-- Hotels -->
+        <!-- ─── CHANGE 1 & 2: Hotels with Extra Bed + Bed Type ─── -->
         <div style="margin-bottom:16px">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
             <div class="form-section-title" style="margin-bottom:0"><i class="fas fa-hotel"></i> Hotels</div>
             <button class="btn btn-secondary btn-sm" onclick="addHotel()"><i class="fas fa-plus"></i> Add Hotel</button>
           </div>
           <div id="hotel-list"></div>
+          <!-- Column header hint -->
+          <div style="display:grid; grid-template-columns:1fr 1fr 100px 50px 50px 110px 90px 90px 36px; gap:6px; padding:0 0 4px; font-size:10px; color:var(--text3); font-weight:600; text-transform:uppercase; letter-spacing:.4px">
+            <span>City</span><span>Hotel Name</span><span>Category</span><span>Nights</span><span>Rooms</span><span>₹/Night/Room</span><span>Extra Bed</span><span>Bed Type</span><span></span>
+          </div>
         </div>
 
         <!-- Transport -->
@@ -435,7 +541,6 @@
               </select>
             </div>
           </div>
-          <!-- Sub-category preview -->
           <div id="subcat-preview" style="display:none; margin-top:10px; background:var(--surface2); border-radius:8px; padding:10px 14px; font-size:12px">
             <div style="display:flex; gap:16px; flex-wrap:wrap; align-items:center">
               <span id="preview-duration" style="color:var(--text3)"></span>
@@ -482,6 +587,20 @@
     </div>
   </div>
 </div>
+
+<!-- ─── CHANGE 5: Trash / Restore Modal ─── -->
+<div class="modal-overlay" id="trash-modal">
+  <div class="modal" style="max-width:700px">
+    <div class="modal-header">
+      <div class="modal-title"><i class="fas fa-trash-restore"></i> Deleted Leads (Trash)</div>
+      <button class="modal-close" onclick="closeModal('trash-modal')">&times;</button>
+    </div>
+    <div id="trash-list" style="max-height:460px; overflow-y:auto">
+      <div class="loading"><div class="spinner"></div> Loading...</div>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block extra_scripts %}
@@ -494,13 +613,29 @@ let selectedNoteColor = 'yellow';
 let allCategories = [];
 let currentSubcatData = null;
 
-const RESULT_COLORS = {'Not Connected':'red','Call Not Picked':'red','Customer Busy':'yellow','Interested':'green','Call Later':'yellow','Not Interested':'red','Package Sent':'blue','Booking Confirmed':'green','Other':'purple'};
-const RESULT_ICONS  = {'Not Connected':'fa-phone-slash','Call Not Picked':'fa-phone-volume','Customer Busy':'fa-phone-flip','Interested':'fa-thumbs-up','Call Later':'fa-clock','Not Interested':'fa-thumbs-down','Package Sent':'fa-paper-plane','Booking Confirmed':'fa-check-circle','Other':'fa-comment'};
+// ─── CHANGE 3: Updated result colors & icons for simplified set ───
+const RESULT_COLORS = {
+  'Interested':         'green',
+  'Not Interested':     'red',
+  'Package Sent':       'blue',
+  'Booking Confirmed':  'green',
+  'Cancel':             'red',
+  'Customer Busy':      'yellow'
+};
+const RESULT_ICONS = {
+  'Interested':         'fa-thumbs-up',
+  'Not Interested':     'fa-thumbs-down',
+  'Package Sent':       'fa-paper-plane',
+  'Booking Confirmed':  'fa-check-circle',
+  'Cancel':             'fa-ban',
+  'Customer Busy':      'fa-phone-flip'
+};
 
-// Hotel category options (centralised)
 const HOTEL_CATEGORIES = ['Standard','Deluxe','2 Star','3 Star','4 Star','5 Star'];
 
-// Vehicle type options (centralised)
+// ─── CHANGE 2: Bed type options ───
+const BED_TYPES = ['Single Bed', 'Double Bed', 'Triple Bed'];
+
 const VEHICLE_OPTIONS = [
   { group: 'Sedan / Hatchback',  options: [{ value:'Sedan', label:'Sedan' }] },
   { group: 'MUV / SUV',          options: [
@@ -529,10 +664,15 @@ function buildVehicleOptions(selectedValue) {
     ).join('')}</optgroup>`
   ).join('');
 }
-
 function buildHotelCategoryOptions(selectedValue) {
   return HOTEL_CATEGORIES.map(c =>
     `<option value="${c}"${c===selectedValue?' selected':''}>${c}</option>`
+  ).join('');
+}
+// ─── CHANGE 2: Build bed type options ───
+function buildBedTypeOptions(selectedValue) {
+  return BED_TYPES.map(b =>
+    `<option value="${b}"${b===selectedValue?' selected':''}>${b}</option>`
   ).join('');
 }
 
@@ -563,7 +703,7 @@ async function loadLead() {
   renderCallStats(); renderPinnedNotes(); renderPayments(); renderWhatsAppLog();
 }
 
-// ── HEADER (with Delete button) ───────────────────────────────
+// ── HEADER ─── CHANGE 5: Soft delete with trash button ────────
 function renderHeader() {
   document.getElementById('lead-title').textContent = leadData.customer_name;
   document.getElementById('lead-meta').innerHTML = `
@@ -571,21 +711,79 @@ function renderHeader() {
     ${statusBadge(leadData.status)}
     <span style="color:var(--text3);font-size:12px">Enquiry: ${formatDate(leadData.enquiry_date||leadData.created_at)}</span>`;
   document.getElementById('lead-actions').innerHTML = `
+    <button class="btn btn-secondary btn-sm" onclick="openTrashModal()"><i class="fas fa-trash-restore"></i> Trash</button>
     <button class="btn btn-secondary btn-sm" onclick="duplicateLead()"><i class="fas fa-copy"></i> Duplicate</button>
     <button class="btn btn-primary btn-sm" onclick="switchTab('booking')"><i class="fas fa-ticket"></i> Book Now</button>
     <button class="btn btn-danger btn-sm" onclick="deleteLead()" style="background:var(--red);border-color:var(--red);color:#fff"><i class="fas fa-trash"></i> Delete</button>`;
 }
 
-// ── DELETE LEAD ───────────────────────────────────────────────
+// ── CHANGE 5: Soft delete — moves to trash, restorable ────────
 async function deleteLead() {
-  if (!confirm(`Delete lead ${leadData.lead_id} for ${leadData.customer_name}?\n\nThis will permanently remove all conversations, packages, follow-ups, payments and notes.\n\nThis cannot be undone.`)) return;
+  if (!confirm(`Move lead ${leadData.lead_id} for ${leadData.customer_name} to trash?\n\nYou can restore it later from the Trash button.\n\nContinue?`)) return;
   try {
     await apiFetch(`/api/leads/${LEAD_ID}`, { method: 'DELETE' });
-    toast('Lead deleted', 'success');
+    toast('Lead moved to trash', 'success');
     setTimeout(() => window.location.href = '/leads', 1000);
   } catch(e) {
     toast(e.message, 'error');
   }
+}
+
+// ── CHANGE 5: Trash modal — list + restore ────────────────────
+async function openTrashModal() {
+  document.getElementById('trash-modal').classList.add('show');
+  const el = document.getElementById('trash-list');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div> Loading...</div>';
+  try {
+    const leads = await apiFetch('/api/leads/trash');
+    if (!leads || !leads.length) {
+      el.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text3)"><i class="fas fa-trash" style="font-size:30px;margin-bottom:10px;display:block"></i>Trash is empty</div>';
+      return;
+    }
+    el.innerHTML = `
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="border-bottom:2px solid var(--border)">
+          <th style="text-align:left;padding:8px 10px;color:var(--text3);font-weight:600">Lead ID</th>
+          <th style="text-align:left;padding:8px 10px;color:var(--text3);font-weight:600">Customer</th>
+          <th style="text-align:left;padding:8px 10px;color:var(--text3);font-weight:600">Tour</th>
+          <th style="text-align:left;padding:8px 10px;color:var(--text3);font-weight:600">Deleted</th>
+          <th style="padding:8px 10px"></th>
+        </tr></thead>
+        <tbody>
+          ${leads.map(l => `
+            <tr style="border-bottom:1px solid var(--border)">
+              <td style="padding:8px 10px"><code style="color:var(--accent);font-size:11px">${l.lead_id}</code></td>
+              <td style="padding:8px 10px"><div style="font-weight:600">${l.customer_name}</div><div style="font-size:11px;color:var(--text3)">${l.mobile}</div></td>
+              <td style="padding:8px 10px;color:var(--text3)">${l.tour_name||'—'}</td>
+              <td style="padding:8px 10px;font-size:11px;color:var(--text3)">${formatDate(l.deleted_at)}<br>${l.deleted_by_name||''}</td>
+              <td style="padding:8px 10px;text-align:right">
+                <button class="btn btn-sm btn-success" onclick="restoreLead(${l.id},'${l.lead_id}')"><i class="fas fa-trash-restore"></i> Restore</button>
+                <button class="btn btn-sm btn-danger" style="margin-left:4px" onclick="permanentDelete(${l.id},'${l.lead_id}')"><i class="fas fa-times"></i> Perm. Delete</button>
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+  } catch(e) {
+    el.innerHTML = `<div style="color:var(--red);text-align:center;padding:20px">${e.message}</div>`;
+  }
+}
+
+async function restoreLead(lid, leadIdStr) {
+  if (!confirm(`Restore lead ${leadIdStr}?`)) return;
+  try {
+    await apiFetch(`/api/leads/${lid}/restore`, { method: 'POST' });
+    toast(`Lead ${leadIdStr} restored!`, 'success');
+    openTrashModal(); // refresh the list
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function permanentDelete(lid, leadIdStr) {
+  if (!confirm(`PERMANENTLY delete lead ${leadIdStr}?\n\nThis CANNOT be undone. All data will be lost.`)) return;
+  try {
+    await apiFetch(`/api/leads/${lid}/permanent-delete`, { method: 'DELETE' });
+    toast(`Lead ${leadIdStr} permanently deleted`, 'success');
+    openTrashModal();
+  } catch(e) { toast(e.message, 'error'); }
 }
 
 function renderCustomerCard() {
@@ -611,7 +809,6 @@ function renderCustomerCard() {
   document.getElementById('quick-wa-btn').target = '_blank';
 }
 
-// ── TOUR CATEGORY SIDEBAR ─────────────────────────────────────
 function renderTourCategoryCard() {
   const el = document.getElementById('tour-category-display');
   const catId = leadData.tour_category_id;
@@ -685,7 +882,6 @@ function renderPackages() {
     </div>`).join('');
 }
 
-// ── PACKAGE INIT ──────────────────────────────────────────────
 function initPackage() {
   currentPkgId=null; itineraryDays=[]; hotels=[]; otherCharges=[];
   document.getElementById('pkg_name').value = leadData.tour_name||'';
@@ -849,62 +1045,184 @@ async function saveEdit() {
   closeModal('edit-modal'); toast('Lead updated!','success'); await loadLead();
 }
 
-// ── CONVERSATIONS ─────────────────────────────────────────────
+// ─── CHANGE 6 FIX + CHANGE 3: Timeline render ────────────────
+// CHANGE 6: Fixed next follow-up highlight with bright pill badge
+// CHANGE 3: call_duration removed from display
 function renderTimeline() {
   const el = document.getElementById('timeline-list');
   if (!leadData.conversations||!leadData.conversations.length) {
-    el.innerHTML='<div class="empty-state"><i class="fas fa-comments"></i><h3>No conversations yet</h3><p>Add the first conversation update above</p></div>';return;
+    el.innerHTML='<div class="empty-state"><i class="fas fa-comments"></i><h3>No conversations yet</h3><p>Add the first conversation update above</p></div>';
+    return;
   }
-  el.innerHTML=`<div class="timeline">`+leadData.conversations.map(c=>{
-    const color=RESULT_COLORS[c.call_result]||'purple';
-    const icon=RESULT_ICONS[c.call_result]||'fa-comment';
-    const dur=c.call_duration?`<span style="background:rgba(99,102,241,.1);color:var(--blue);font-size:10px;padding:2px 6px;border-radius:10px"><i class="fas fa-clock"></i> ${c.call_duration} min</span>`:'';
-    return `<div class="timeline-item"><div class="timeline-dot ${color}"><i class="fas ${icon}" style="font-size:10px"></i></div><div class="timeline-content"><div class="timeline-meta"><span class="timeline-date">${formatDate(c.created_at)}</span><span class="timeline-staff">${c.staff_name}</span>${dur}<span class="badge badge-${color==='red'?'lost':color==='green'?'booked':color==='yellow'?'followup':'new'}" style="font-size:10px;margin-left:auto">${c.call_result}</span></div>${c.summary?`<div style="color:var(--text);font-size:13px;margin-top:4px">${c.summary}</div>`:''} ${c.next_followup_date?`<div style="color:var(--text3);font-size:11px;margin-top:6px"><i class="fas fa-calendar-check" style="color:var(--yellow)"></i> Next follow-up: ${formatDate(c.next_followup_date)}</div>`:''}<div style="color:var(--text3);font-size:10px;margin-top:4px">${c.call_type} · ${timeAgo(c.created_at)}</div></div></div>`;
-  }).join('')+`</div>`;
+  el.innerHTML = `<div class="timeline">` + leadData.conversations.map(c => {
+    const color  = RESULT_COLORS[c.call_result] || 'purple';
+    const icon   = RESULT_ICONS[c.call_result]  || 'fa-comment';
+
+    // CHANGE 6: Bold, highlighted follow-up pill with calendar icon and vivid color
+    const followupPill = c.next_followup_date
+      ? `<div style="
+            display:inline-flex;
+            align-items:center;
+            gap:5px;
+            margin-top:8px;
+            background:linear-gradient(135deg,#F59E0B22,#F97316 22%);
+            background:rgba(245,158,11,.15);
+            border:1.5px solid #F59E0B;
+            border-radius:20px;
+            padding:4px 10px;
+            font-size:11px;
+            font-weight:700;
+            color:#B45309;
+          ">
+          <i class="fas fa-calendar-check" style="color:#F59E0B;font-size:11px"></i>
+          Follow-up: ${formatDate(c.next_followup_date)}
+        </div>`
+      : '';
+
+    const badgeClass = color==='red'?'lost':color==='green'?'booked':color==='yellow'?'followup':'new';
+
+    return `
+      <div class="timeline-item">
+        <div class="timeline-dot ${color}">
+          <i class="fas ${icon}" style="font-size:10px"></i>
+        </div>
+        <div class="timeline-content">
+          <div class="timeline-meta">
+            <span class="timeline-date">${formatDate(c.created_at)}</span>
+            <span class="timeline-staff">${c.staff_name}</span>
+            <span class="badge badge-${badgeClass}" style="font-size:10px;margin-left:auto">${c.call_result}</span>
+          </div>
+          ${c.summary ? `<div style="color:var(--text);font-size:13px;margin-top:4px">${c.summary}</div>` : ''}
+          ${followupPill}
+          <div style="color:var(--text3);font-size:10px;margin-top:6px">${c.call_type} · ${timeAgo(c.created_at)}</div>
+        </div>
+      </div>`;
+  }).join('') + `</div>`;
 }
 
+// ─── CHANGE 6 FIX: addConversation — removed duplicate INSERT ─
+// Original had TWO db_execute inserts. Only one is needed.
 async function addConversation() {
-  const result=document.getElementById('call_result').value;
-  if(!result){toast('Please select a call result','error');return;}
-  const payload={call_type:document.getElementById('call_type').value,call_result:result,call_duration:parseInt(document.getElementById('call_duration').value)||null,summary:document.getElementById('conv_summary').value.trim(),next_followup_date:document.getElementById('next_followup_date').value||null,status_update:document.getElementById('status_update').value||null};
-  try{
-    await apiFetch(`/api/leads/${LEAD_ID}/conversations`,{method:'POST',body:JSON.stringify(payload)});
-    toast('Conversation saved!','success');
-    ['call_result','conv_summary','call_duration','next_followup_date','status_update'].forEach(id=>document.getElementById(id).value='');
-    if(document.getElementById('send_whatsapp_after').checked){await loadLead();switchTab('whatsapp');applyWATemplate('followup');}
-    else await loadLead();
-  }catch(e){toast(e.message,'error');}
+  const result = document.getElementById('call_result').value;
+  if (!result) { toast('Please select a call result','error'); return; }
+  const payload = {
+    call_type:          document.getElementById('call_type').value,
+    call_result:        result,
+    // CHANGE 3: call_duration removed from payload
+    summary:            document.getElementById('conv_summary').value.trim(),
+    next_followup_date: document.getElementById('next_followup_date').value || null,
+    status_update:      document.getElementById('status_update').value || null
+  };
+  try {
+    await apiFetch(`/api/leads/${LEAD_ID}/conversations`, { method:'POST', body:JSON.stringify(payload) });
+    toast('Conversation saved!', 'success');
+    ['call_result','conv_summary','next_followup_date','status_update'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+    if (document.getElementById('send_whatsapp_after').checked) {
+      await loadLead();
+      switchTab('whatsapp');
+      applyWATemplate('followup');
+    } else {
+      await loadLead();
+    }
+  } catch(e) { toast(e.message,'error'); }
 }
 
-// ── PACKAGE BUILDER ───────────────────────────────────────────
+// ─── CHANGE 6 FIX: app.py add_conversation fix ───────────────
+// The existing add_conversation route in app.py inserts TWICE.
+// Replace the entire route body with:
+/*
+@app.route('/api/leads/<int:lid>/conversations', methods=['POST'])
+@jwt_required()
+def add_conversation(lid):
+    identity = json.loads(get_jwt_identity())
+    data = request.get_json()
+    cid = db_execute("""
+        INSERT INTO conversations (lead_id, user_id, summary, call_result, call_type, next_followup_date)
+        VALUES (%s,%s,%s,%s,%s,%s)
+    """, (lid, identity['id'], data.get('summary',''), data.get('call_result',''),
+          data.get('call_type','Outgoing'), data.get('next_followup_date')))
+
+    if data.get('next_followup_date'):
+        db_execute("""
+            INSERT INTO followups (lead_id, user_id, followup_date, notes, status)
+            VALUES (%s,%s,%s,%s,'Pending')
+        """, (lid, identity['id'], data['next_followup_date'], data.get('summary','')))
+
+    if data.get('status_update'):
+        db_execute("UPDATE leads SET status=%s WHERE id=%s", (data['status_update'], lid))
+
+    db_execute("INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details) VALUES (%s,'ADD_CONVERSATION','lead',%s,%s)",
+               (identity['id'], lid, f"Added conversation to lead {lid}"))
+
+    return jsonify({'id': cid, 'message': 'Conversation added'}), 201
+*/
+
+// ─── CHANGE 1 & 2: addHotel with Extra Bed count + Bed Type ──
+function addHotel(){
+  const idx = hotels.length;
+  hotels.push({ city:'', name:'', category:'Standard', nights:1, rooms:1, price:0, extra_beds:0, bed_type:'Double Bed' });
+  const div = document.createElement('div');
+  // 9-column grid: City | Hotel Name | Category | Nights | Rooms | ₹/Night/Room | Extra Beds | Bed Type | Delete
+  div.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 100px 50px 50px 110px 80px 100px 36px;gap:6px;margin-bottom:10px;align-items:end;padding:10px;background:var(--surface2);border-radius:8px';
+  div.innerHTML = `
+    <div class="form-group" style="margin:0">
+      <label style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.4px">City</label>
+      <input type="text" class="form-control" placeholder="e.g. Varanasi" oninput="hotels[${idx}].city=this.value">
+    </div>
+    <div class="form-group" style="margin:0">
+      <label style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.4px">Hotel Name</label>
+      <input type="text" class="form-control" placeholder="Hotel name" oninput="hotels[${idx}].name=this.value">
+    </div>
+    <div class="form-group" style="margin:0">
+      <label style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.4px">Category</label>
+      <select class="form-control" onchange="hotels[${idx}].category=this.value">
+        ${buildHotelCategoryOptions('Standard')}
+      </select>
+    </div>
+    <div class="form-group" style="margin:0">
+      <label style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.4px">Nights</label>
+      <input type="number" class="form-control" value="1" min="1"
+        oninput="hotels[${idx}].nights=parseInt(this.value)||1;recalcTotal()">
+    </div>
+    <div class="form-group" style="margin:0">
+      <label style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.4px">Rooms</label>
+      <input type="number" class="form-control" value="1" min="1"
+        oninput="hotels[${idx}].rooms=parseInt(this.value)||1;recalcTotal()">
+    </div>
+    <div class="form-group" style="margin:0">
+      <label style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.4px">₹/Night/Room</label>
+      <input type="number" class="form-control" placeholder="0"
+        oninput="hotels[${idx}].price=parseInt(this.value)||0;recalcTotal()">
+    </div>
+    <!-- CHANGE 1: Extra Bed count -->
+    <div class="form-group" style="margin:0">
+      <label style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.4px">Extra Bed</label>
+      <input type="number" class="form-control" value="0" min="0" placeholder="0"
+        oninput="hotels[${idx}].extra_beds=parseInt(this.value)||0;recalcTotal()"
+        title="Number of extra beds">
+    </div>
+    <!-- CHANGE 2: Bed Type (Double/Triple/Single) -->
+    <div class="form-group" style="margin:0">
+      <label style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.4px">Bed Type</label>
+      <select class="form-control" onchange="hotels[${idx}].bed_type=this.value">
+        ${buildBedTypeOptions('Double Bed')}
+      </select>
+    </div>
+    <button class="btn btn-danger btn-sm" style="margin-bottom:0;align-self:flex-end"
+      onclick="this.parentElement.remove();hotels.splice(${idx},1);recalcTotal()">
+      <i class="fas fa-trash"></i>
+    </button>`;
+  document.getElementById('hotel-list').appendChild(div);
+}
+
 function addItineraryDay(){
   const idx=itineraryDays.length; itineraryDays.push({day:idx+1,description:''});
   const div=document.createElement('div');
   div.style.cssText='display:flex;gap:8px;margin-bottom:8px;align-items:flex-start';
   div.innerHTML=`<div style="padding:6px 10px;background:var(--accent);color:#fff;border-radius:6px;font-size:12px;font-weight:700;white-space:nowrap;margin-top:2px">Day ${idx+1}</div><input type="text" class="form-control" placeholder="e.g., Arrive Prayagraj, local sightseeing" oninput="itineraryDays[${idx}].description=this.value"><button class="btn btn-danger btn-sm" onclick="this.parentElement.remove();itineraryDays.splice(${idx},1)"><i class="fas fa-trash"></i></button>`;
   document.getElementById('itinerary-days').appendChild(div);
-}
-
-// ── ADD HOTEL (with Rooms field) ──────────────────────────────
-function addHotel(){
-  const idx=hotels.length;
-  hotels.push({city:'',name:'',category:'Standard',nights:1,rooms:1,price:0});
-  const div=document.createElement('div');
-  div.style.cssText='display:grid;grid-template-columns:1fr 1fr 120px 55px 55px 110px 36px;gap:6px;margin-bottom:8px;align-items:end';
-  div.innerHTML=`
-    <div class="form-group" style="margin:0"><label style="font-size:10px">City</label><input type="text" class="form-control" placeholder="City" oninput="hotels[${idx}].city=this.value"></div>
-    <div class="form-group" style="margin:0"><label style="font-size:10px">Hotel Name</label><input type="text" class="form-control" placeholder="Hotel name" oninput="hotels[${idx}].name=this.value"></div>
-    <div class="form-group" style="margin:0">
-      <label style="font-size:10px">Category</label>
-      <select class="form-control" onchange="hotels[${idx}].category=this.value">
-        ${buildHotelCategoryOptions('Standard')}
-      </select>
-    </div>
-    <div class="form-group" style="margin:0"><label style="font-size:10px">Nights</label><input type="number" class="form-control" value="1" min="1" oninput="hotels[${idx}].nights=parseInt(this.value)||1;recalcTotal()"></div>
-    <div class="form-group" style="margin:0"><label style="font-size:10px">Rooms</label><input type="number" class="form-control" value="1" min="1" oninput="hotels[${idx}].rooms=parseInt(this.value)||1;recalcTotal()"></div>
-    <div class="form-group" style="margin:0"><label style="font-size:10px">Price/Night/Room (₹)</label><input type="number" class="form-control" placeholder="0" oninput="hotels[${idx}].price=parseInt(this.value)||0;recalcTotal()"></div>
-    <button class="btn btn-danger btn-sm" style="margin-bottom:0" onclick="this.parentElement.remove();hotels.splice(${idx},1);recalcTotal()"><i class="fas fa-trash"></i></button>`;
-  document.getElementById('hotel-list').appendChild(div);
 }
 
 function addCharge(){
@@ -915,52 +1233,53 @@ function addCharge(){
   document.getElementById('charges-list').appendChild(div);
 }
 
-// ── RECALC (rooms × nights × price) ──────────────────────────
+// ── RECALC (rooms × nights × price, extra beds not priced auto) ─
 function recalcTotal(){
-  const hotelTotal=hotels.reduce((s,h)=>s+(( parseInt(h.price)||0)*(parseInt(h.nights)||1)*(parseInt(h.rooms)||1)),0);
-  const transport=parseInt(document.getElementById('pkg_transport_cost')?.value)||0;
-  const charges=otherCharges.reduce((s,c)=>s+(parseInt(c.amount)||0),0);
-  const base=hotelTotal+transport+charges;
-  const discount=parseInt(document.getElementById('pkg_discount')?.value)||0;
-  document.getElementById('pkg_hotel_total').value=hotelTotal;
-  document.getElementById('pkg_base').value=base;
-  document.getElementById('pkg_final').value=base-discount;
+  const hotelTotal = hotels.reduce((s,h) => s + ((parseInt(h.price)||0) * (parseInt(h.nights)||1) * (parseInt(h.rooms)||1)), 0);
+  const transport  = parseInt(document.getElementById('pkg_transport_cost')?.value) || 0;
+  const charges    = otherCharges.reduce((s,c) => s + (parseInt(c.amount)||0), 0);
+  const base       = hotelTotal + transport + charges;
+  const discount   = parseInt(document.getElementById('pkg_discount')?.value) || 0;
+  document.getElementById('pkg_hotel_total').value = hotelTotal;
+  document.getElementById('pkg_base').value        = base;
+  document.getElementById('pkg_final').value       = base - discount;
 }
 
 async function savePackage(){
-  const payload={
-    tour_name:document.getElementById('pkg_name').value,
-    itinerary:itineraryDays,
+  const payload = {
+    tour_name:    document.getElementById('pkg_name').value,
+    itinerary:    itineraryDays,
     hotels,
-    transport:{type:document.getElementById('pkg_vehicle').value,price:parseInt(document.getElementById('pkg_transport_cost').value)||0},
-    other_charges:otherCharges,
-    base_price:parseInt(document.getElementById('pkg_base').value)||0,
-    discount:parseInt(document.getElementById('pkg_discount').value)||0,
-    final_price:parseInt(document.getElementById('pkg_final').value)||0,
-    notes:document.getElementById('pkg_notes').value,
-    tour_category_id:leadData.tour_category_id||null,
-    tour_subcategory_id:leadData.tour_subcategory_id||null
+    transport:    { type: document.getElementById('pkg_vehicle').value, price: parseInt(document.getElementById('pkg_transport_cost').value)||0 },
+    other_charges: otherCharges,
+    base_price:   parseInt(document.getElementById('pkg_base').value)  || 0,
+    discount:     parseInt(document.getElementById('pkg_discount').value) || 0,
+    final_price:  parseInt(document.getElementById('pkg_final').value)  || 0,
+    notes:        document.getElementById('pkg_notes').value,
+    tour_category_id:    leadData.tour_category_id    || null,
+    tour_subcategory_id: leadData.tour_subcategory_id || null
   };
-  const url=currentPkgId?`/api/packages/${currentPkgId}`:`/api/leads/${LEAD_ID}/packages`;
-  await apiFetch(url,{method:currentPkgId?'PUT':'POST',body:JSON.stringify(payload)});
-  document.getElementById('package-form').style.display='none';
-  toast('Package saved!','success'); await loadLead();
+  const url = currentPkgId ? `/api/packages/${currentPkgId}` : `/api/leads/${LEAD_ID}/packages`;
+  await apiFetch(url, { method: currentPkgId ? 'PUT' : 'POST', body: JSON.stringify(payload) });
+  document.getElementById('package-form').style.display = 'none';
+  toast('Package saved!', 'success');
+  await loadLead();
 }
 
-// ── LOAD PACKAGE FOR EDIT (restores all fields incl. rooms) ───
+// ── LOAD PACKAGE FOR EDIT (restores extra_beds + bed_type) ────
 async function loadPackageForEdit(pkgId){
-  const p=await apiFetch(`/api/packages/${pkgId}`); if(!p) return;
-  currentPkgId=pkgId;
+  const p = await apiFetch(`/api/packages/${pkgId}`); if (!p) return;
+  currentPkgId = pkgId;
 
-  document.getElementById('pkg_name').value        = p.tour_name||'';
+  document.getElementById('pkg_name').value          = p.tour_name||'';
   document.getElementById('pkg_transport_cost').value = p.transport?.price||0;
-  document.getElementById('pkg_vehicle').value     = p.transport?.type||'Sedan';
-  document.getElementById('pkg_discount').value    = p.discount||0;
-  document.getElementById('pkg_notes').value       = p.notes||'';
+  document.getElementById('pkg_vehicle').value        = p.transport?.type||'Sedan';
+  document.getElementById('pkg_discount').value       = p.discount||0;
+  document.getElementById('pkg_notes').value          = p.notes||'';
 
   // Restore itinerary
   itineraryDays = p.itinerary||[];
-  document.getElementById('itinerary-days').innerHTML='';
+  document.getElementById('itinerary-days').innerHTML = '';
   itineraryDays.forEach((day, i) => {
     addItineraryDay();
     const inputs = document.getElementById('itinerary-days').querySelectorAll('input[type="text"]');
@@ -968,27 +1287,35 @@ async function loadPackageForEdit(pkgId){
     itineraryDays[i].description = day.description||'';
   });
 
-  // Restore hotels (including rooms)
+  // Restore hotels (including extra_beds + bed_type)
   hotels = p.hotels||[];
-  document.getElementById('hotel-list').innerHTML='';
+  document.getElementById('hotel-list').innerHTML = '';
   hotels.forEach((h, idx) => {
     addHotel();
     const row = document.getElementById('hotel-list').children[idx];
     if (!row) return;
-    const inputs = row.querySelectorAll('input[type="text"], input[type="number"]');
-    // inputs order: city(text), hotelName(text), nights(number), rooms(number), price(number)
-    if (inputs[0]) { inputs[0].value = h.city||'';   hotels[idx].city  = h.city||''; }
-    if (inputs[1]) { inputs[1].value = h.name||'';   hotels[idx].name  = h.name||''; }
-    if (inputs[2]) { inputs[2].value = h.nights||1;  hotels[idx].nights = parseInt(h.nights)||1; }
-    if (inputs[3]) { inputs[3].value = h.rooms||1;   hotels[idx].rooms  = parseInt(h.rooms)||1; }
-    if (inputs[4]) { inputs[4].value = h.price||0;   hotels[idx].price  = parseInt(h.price)||0; }
-    const sel = row.querySelector('select');
-    if (sel) { sel.value = h.category||'Standard'; hotels[idx].category = h.category||'Standard'; }
+    const textInputs = row.querySelectorAll('input[type="text"]');
+    const numInputs  = row.querySelectorAll('input[type="number"]');
+    const selects    = row.querySelectorAll('select');
+
+    // text inputs: city [0], hotel name [1]
+    if (textInputs[0]) { textInputs[0].value = h.city||'';   hotels[idx].city   = h.city||''; }
+    if (textInputs[1]) { textInputs[1].value = h.name||'';   hotels[idx].name   = h.name||''; }
+
+    // number inputs: nights [0], rooms [1], price [2], extra_beds [3]
+    if (numInputs[0]) { numInputs[0].value = h.nights||1;      hotels[idx].nights     = parseInt(h.nights)||1; }
+    if (numInputs[1]) { numInputs[1].value = h.rooms||1;       hotels[idx].rooms      = parseInt(h.rooms)||1;  }
+    if (numInputs[2]) { numInputs[2].value = h.price||0;       hotels[idx].price      = parseInt(h.price)||0;  }
+    if (numInputs[3]) { numInputs[3].value = h.extra_beds||0;  hotels[idx].extra_beds = parseInt(h.extra_beds)||0; }
+
+    // selects: category [0], bed_type [1]
+    if (selects[0]) { selects[0].value = h.category||'Standard';   hotels[idx].category  = h.category||'Standard';  }
+    if (selects[1]) { selects[1].value = h.bed_type||'Double Bed';  hotels[idx].bed_type  = h.bed_type||'Double Bed'; }
   });
 
   // Restore other charges
   otherCharges = p.other_charges||[];
-  document.getElementById('charges-list').innerHTML='';
+  document.getElementById('charges-list').innerHTML = '';
   otherCharges.forEach((c, idx) => {
     addCharge();
     const row = document.getElementById('charges-list').children[idx];
@@ -998,108 +1325,176 @@ async function loadPackageForEdit(pkgId){
     if (inputs[1]) { inputs[1].value = c.amount||0;  otherCharges[idx].amount = parseInt(c.amount)||0; }
   });
 
-  document.getElementById('package-form').style.display='block';
+  document.getElementById('package-form').style.display = 'block';
   updateQuickFillBar(); recalcTotal(); switchTab('package');
 }
 
 function usePackageForBooking(pkgId){
-  const pkg=leadData.packages.find(p=>p.id===pkgId); if(!pkg) return;
+  const pkg = leadData.packages.find(p => p.id === pkgId); if (!pkg) return;
   switchTab('booking');
-  document.getElementById('bk_total').value=pkg.final_price;
-  document.getElementById('bk_discount').value=0;
-  document.getElementById('bk_final').value=pkg.final_price;
+  document.getElementById('bk_total').value   = pkg.final_price;
+  document.getElementById('bk_discount').value = 0;
+  document.getElementById('bk_final').value   = pkg.final_price;
   calcBalance();
 }
 
 // ── BOOKING ───────────────────────────────────────────────────
 function renderBooking(){
-  document.getElementById('bk_payment_date').value=new Date().toISOString().split('T')[0];
-  const b=leadData.booking; const existing=document.getElementById('existing-booking');
-  if(b){
-    document.getElementById('booking-warning').style.display='flex';
-    existing.innerHTML=`<div class="card" style="margin-bottom:16px;border-color:var(--green)"><div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><i class="fas fa-check-circle" style="color:var(--green);font-size:20px"></i><div><div style="font-weight:700;color:var(--green)">BOOKED</div><code style="color:var(--text3);font-size:11px">${b.booking_id}</code></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px"><div>Total: <strong>${formatCurrency(b.total_amount)}</strong></div><div>Discount: <strong style="color:var(--red)">-${formatCurrency(b.discount)}</strong></div><div>Final: <strong style="color:var(--green)">${formatCurrency(b.final_amount)}</strong></div><div>Advance: <strong>${formatCurrency(b.advance_paid)}</strong></div><div>Balance: <strong style="color:${b.balance>0?'var(--red)':'var(--green)'}">${formatCurrency(b.balance)}</strong></div><div>Method: <strong>${b.payment_method}</strong></div></div></div>`;
+  document.getElementById('bk_payment_date').value = new Date().toISOString().split('T')[0];
+  const b = leadData.booking; const existing = document.getElementById('existing-booking');
+  if (b) {
+    document.getElementById('booking-warning').style.display = 'flex';
+    existing.innerHTML = `<div class="card" style="margin-bottom:16px;border-color:var(--green)">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <i class="fas fa-check-circle" style="color:var(--green);font-size:20px"></i>
+        <div><div style="font-weight:700;color:var(--green)">BOOKED</div><code style="color:var(--text3);font-size:11px">${b.booking_id}</code></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">
+        <div>Total: <strong>${formatCurrency(b.total_amount)}</strong></div>
+        <div>Discount: <strong style="color:var(--red)">-${formatCurrency(b.discount)}</strong></div>
+        <div>Final: <strong style="color:var(--green)">${formatCurrency(b.final_amount)}</strong></div>
+        <div>Advance: <strong>${formatCurrency(b.advance_paid)}</strong></div>
+        <div>Balance: <strong style="color:${b.balance>0?'var(--red)':'var(--green)'}">${formatCurrency(b.balance)}</strong></div>
+        <div>Method: <strong>${b.payment_method}</strong></div>
+      </div></div>`;
   }
 }
 
 function calcBalance(){
-  const total=parseInt(document.getElementById('bk_total').value)||0;
-  const discount=parseInt(document.getElementById('bk_discount').value)||0;
-  const advance=parseInt(document.getElementById('bk_advance').value)||0;
-  document.getElementById('bk_final').value=total-discount;
-  document.getElementById('bk_balance').value=(total-discount)-advance;
+  const total    = parseInt(document.getElementById('bk_total').value)||0;
+  const discount = parseInt(document.getElementById('bk_discount').value)||0;
+  const advance  = parseInt(document.getElementById('bk_advance').value)||0;
+  document.getElementById('bk_final').value   = total - discount;
+  document.getElementById('bk_balance').value = (total - discount) - advance;
 }
 
 async function createBooking(){
-  const total=parseInt(document.getElementById('bk_total').value)||0;
-  if(!total){toast('Please enter total amount','error');return;}
-  const payload={total_amount:total,discount:parseInt(document.getElementById('bk_discount').value)||0,final_amount:parseInt(document.getElementById('bk_final').value)||0,advance_paid:parseInt(document.getElementById('bk_advance').value)||0,balance:parseInt(document.getElementById('bk_balance').value)||0,payment_method:document.getElementById('bk_payment_method').value,payment_date:document.getElementById('bk_payment_date').value,notes:document.getElementById('bk_notes').value};
-  try{const res=await apiFetch(`/api/leads/${LEAD_ID}/book`,{method:'POST',body:JSON.stringify(payload)});toast(`Booking ${res.booking_id} confirmed!`,'success');await loadLead();switchTab('payments');}catch(e){toast(e.message,'error');}
+  const total = parseInt(document.getElementById('bk_total').value)||0;
+  if (!total) { toast('Please enter total amount','error'); return; }
+  const payload = {
+    total_amount: total,
+    discount:     parseInt(document.getElementById('bk_discount').value)||0,
+    final_amount: parseInt(document.getElementById('bk_final').value)||0,
+    advance_paid: parseInt(document.getElementById('bk_advance').value)||0,
+    balance:      parseInt(document.getElementById('bk_balance').value)||0,
+    payment_method: document.getElementById('bk_payment_method').value,
+    payment_date:   document.getElementById('bk_payment_date').value,
+    notes:          document.getElementById('bk_notes').value
+  };
+  try {
+    const res = await apiFetch(`/api/leads/${LEAD_ID}/book`, { method:'POST', body:JSON.stringify(payload) });
+    toast(`Booking ${res.booking_id} confirmed!`, 'success');
+    await loadLead(); switchTab('payments');
+  } catch(e) { toast(e.message,'error'); }
 }
 
 // ── PAYMENTS ──────────────────────────────────────────────────
 function renderPayments(){
-  document.getElementById('pay_date').value=new Date().toISOString().split('T')[0];
-  const b=leadData.booking;
-  const summaryEl=document.getElementById('payment-summary-card');
-  const histEl=document.getElementById('payment-history-list');
-  if(!b){summaryEl.innerHTML='';document.getElementById('add-payment-card').style.display='none';histEl.innerHTML='<div style="color:var(--text3);text-align:center;padding:20px;font-size:13px">No booking found. Create a booking first.</div>';return;}
-  document.getElementById('add-payment-card').style.display='block';
-  const pct=b.final_amount>0?Math.min(100,Math.round((b.advance_paid/b.final_amount)*100)):0;
-  const barColor=b.balance<=0?'var(--green)':b.balance<b.final_amount*0.5?'var(--yellow)':'var(--red)';
-  summaryEl.innerHTML=`<div class="card" style="margin-bottom:16px;border-color:${b.balance<=0?'var(--green)':'var(--border)'}"><div style="display:flex;justify-content:space-between;margin-bottom:10px"><div><div style="font-size:12px;color:var(--text3)">Total Amount</div><div style="font-size:20px;font-weight:700">${formatCurrency(b.final_amount)}</div></div><div style="text-align:right"><div style="font-size:12px;color:var(--text3)">Balance Due</div><div style="font-size:20px;font-weight:700;color:${b.balance>0?'var(--red)':'var(--green)'}">${b.balance<=0?'✓ Paid':formatCurrency(b.balance)}</div></div></div><div style="background:var(--surface2);border-radius:6px;height:10px;overflow:hidden;margin-bottom:6px"><div style="width:${pct}%;height:100%;background:${barColor};border-radius:6px;transition:width .6s ease"></div></div><div style="font-size:11px;color:var(--text3)">${pct}% paid · Advance: ${formatCurrency(b.advance_paid)}</div></div>`;
-  const payments=leadData.payments||[];
-  histEl.innerHTML=!payments.length?'<div style="color:var(--text3);text-align:center;padding:20px;font-size:13px">No payment records yet</div>':payments.map(p=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)"><div><div style="font-weight:600;color:var(--green)">${formatCurrency(p.amount)}</div><div style="font-size:11px;color:var(--text3)">${p.payment_method} · ${formatDate(p.payment_date)}${p.reference_no?' · Ref: '+p.reference_no:''}</div>${p.notes?`<div style="font-size:11px;color:var(--text3)">${p.notes}</div>`:''}</div><i class="fas fa-check-circle" style="color:var(--green)"></i></div>`).join('');
+  document.getElementById('pay_date').value = new Date().toISOString().split('T')[0];
+  const b = leadData.booking;
+  const summaryEl = document.getElementById('payment-summary-card');
+  const histEl    = document.getElementById('payment-history-list');
+  if (!b) {
+    summaryEl.innerHTML = '';
+    document.getElementById('add-payment-card').style.display = 'none';
+    histEl.innerHTML = '<div style="color:var(--text3);text-align:center;padding:20px;font-size:13px">No booking found. Create a booking first.</div>';
+    return;
+  }
+  document.getElementById('add-payment-card').style.display = 'block';
+  const pct = b.final_amount > 0 ? Math.min(100, Math.round((b.advance_paid / b.final_amount) * 100)) : 0;
+  const barColor = b.balance <= 0 ? 'var(--green)' : b.balance < b.final_amount*0.5 ? 'var(--yellow)' : 'var(--red)';
+  summaryEl.innerHTML = `<div class="card" style="margin-bottom:16px;border-color:${b.balance<=0?'var(--green)':'var(--border)'}">
+    <div style="display:flex;justify-content:space-between;margin-bottom:10px">
+      <div><div style="font-size:12px;color:var(--text3)">Total Amount</div><div style="font-size:20px;font-weight:700">${formatCurrency(b.final_amount)}</div></div>
+      <div style="text-align:right"><div style="font-size:12px;color:var(--text3)">Balance Due</div><div style="font-size:20px;font-weight:700;color:${b.balance>0?'var(--red)':'var(--green)'}">${b.balance<=0?'✓ Paid':formatCurrency(b.balance)}</div></div>
+    </div>
+    <div style="background:var(--surface2);border-radius:6px;height:10px;overflow:hidden;margin-bottom:6px">
+      <div style="width:${pct}%;height:100%;background:${barColor};border-radius:6px;transition:width .6s ease"></div>
+    </div>
+    <div style="font-size:11px;color:var(--text3)">${pct}% paid · Advance: ${formatCurrency(b.advance_paid)}</div>
+  </div>`;
+  const payments = leadData.payments || [];
+  histEl.innerHTML = !payments.length
+    ? '<div style="color:var(--text3);text-align:center;padding:20px;font-size:13px">No payment records yet</div>'
+    : payments.map(p => `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+        <div>
+          <div style="font-weight:600;color:var(--green)">${formatCurrency(p.amount)}</div>
+          <div style="font-size:11px;color:var(--text3)">${p.payment_method} · ${formatDate(p.payment_date)}${p.reference_no?' · Ref: '+p.reference_no:''}</div>
+          ${p.notes?`<div style="font-size:11px;color:var(--text3)">${p.notes}</div>`:''}
+        </div>
+        <i class="fas fa-check-circle" style="color:var(--green)"></i>
+      </div>`).join('');
 }
 
 async function addPayment(){
-  const b=leadData.booking; if(!b){toast('No booking found','error');return;}
-  const amount=parseFloat(document.getElementById('pay_amount').value);
-  if(!amount||amount<=0){toast('Enter valid amount','error');return;}
-  try{await apiFetch(`/api/bookings/${b.id}/payment`,{method:'POST',body:JSON.stringify({amount,payment_method:document.getElementById('pay_method').value,payment_date:document.getElementById('pay_date').value,reference_no:document.getElementById('pay_ref').value,notes:document.getElementById('pay_notes').value})});
-  toast('Payment recorded!','success');['pay_amount','pay_ref','pay_notes'].forEach(id=>document.getElementById(id).value='');await loadLead();switchTab('payments');}catch(e){toast(e.message,'error');}
+  const b = leadData.booking; if (!b) { toast('No booking found','error'); return; }
+  const amount = parseFloat(document.getElementById('pay_amount').value);
+  if (!amount||amount<=0) { toast('Enter valid amount','error'); return; }
+  try {
+    await apiFetch(`/api/bookings/${b.id}/payment`, { method:'POST', body:JSON.stringify({
+      amount,
+      payment_method: document.getElementById('pay_method').value,
+      payment_date:   document.getElementById('pay_date').value,
+      reference_no:   document.getElementById('pay_ref').value,
+      notes:          document.getElementById('pay_notes').value
+    })});
+    toast('Payment recorded!','success');
+    ['pay_amount','pay_ref','pay_notes'].forEach(id => document.getElementById(id).value = '');
+    await loadLead(); switchTab('payments');
+  } catch(e) { toast(e.message,'error'); }
 }
 
 // ── WHATSAPP ──────────────────────────────────────────────────
 function renderWhatsAppLog(){
-  const el=document.getElementById('whatsapp-log-list');
-  const msgs=leadData.whatsapp_logs||[];
-  if(!msgs.length){el.innerHTML='<div style="color:var(--text3);text-align:center;padding:20px;font-size:13px">No messages logged yet</div>';return;}
-  el.innerHTML=msgs.map(m=>`<div style="padding:10px 0;border-bottom:1px solid var(--border)"><div style="background:var(--surface2);border-radius:8px;padding:8px 12px;max-width:90%;font-size:13px;white-space:pre-wrap">${m.message}</div><div style="font-size:10px;color:var(--text3);margin-top:4px">${m.staff_name} · ${timeAgo(m.created_at)}</div></div>`).join('');
+  const el   = document.getElementById('whatsapp-log-list');
+  const msgs = leadData.whatsapp_logs || [];
+  if (!msgs.length) { el.innerHTML='<div style="color:var(--text3);text-align:center;padding:20px;font-size:13px">No messages logged yet</div>'; return; }
+  el.innerHTML = msgs.map(m => `
+    <div style="padding:10px 0;border-bottom:1px solid var(--border)">
+      <div style="background:var(--surface2);border-radius:8px;padding:8px 12px;max-width:90%;font-size:13px;white-space:pre-wrap">${m.message}</div>
+      <div style="font-size:10px;color:var(--text3);margin-top:4px">${m.staff_name} · ${timeAgo(m.created_at)}</div>
+    </div>`).join('');
 }
 
-function applyWATemplate(key){const fn=WA_TEMPLATES[key];if(fn)document.getElementById('wa_message').value=fn();}
+function applyWATemplate(key) { const fn = WA_TEMPLATES[key]; if (fn) document.getElementById('wa_message').value = fn(); }
 
 function sendWhatsApp(){
-  const msg=document.getElementById('wa_message').value.trim();
-  if(!msg){toast('Please enter a message','error');return;}
+  const msg = document.getElementById('wa_message').value.trim();
+  if (!msg) { toast('Please enter a message','error'); return; }
   window.open(`https://wa.me/91${leadData.mobile.replace(/\D/g,'')}?text=${encodeURIComponent(msg)}`,'_blank');
   logWhatsApp();
 }
 
 async function logWhatsApp(){
-  const msg=document.getElementById('wa_message').value.trim();
-  if(!msg){toast('Please enter a message to log','error');return;}
-  try{await apiFetch(`/api/leads/${LEAD_ID}/whatsapp`,{method:'POST',body:JSON.stringify({message:msg})});toast('Message logged!','success');document.getElementById('wa_message').value='';await loadLead();switchTab('whatsapp');}catch(e){toast(e.message,'error');}
+  const msg = document.getElementById('wa_message').value.trim();
+  if (!msg) { toast('Please enter a message to log','error'); return; }
+  try {
+    await apiFetch(`/api/leads/${LEAD_ID}/whatsapp`, { method:'POST', body:JSON.stringify({ message:msg }) });
+    toast('Message logged!','success');
+    document.getElementById('wa_message').value = '';
+    await loadLead(); switchTab('whatsapp');
+  } catch(e) { toast(e.message,'error'); }
 }
 
 function sharePackageWhatsApp(pkgId){
   const pkg = leadData.packages.find(p => p.id === pkgId);
   if (!pkg) return;
-
-  const hotelsList  = typeof pkg.hotels       === 'string' ? JSON.parse(pkg.hotels       || '[]') : (pkg.hotels       || []);
-  const transport   = typeof pkg.transport    === 'string' ? JSON.parse(pkg.transport    || '{}') : (pkg.transport    || {});
-  const charges     = typeof pkg.other_charges === 'string' ? JSON.parse(pkg.other_charges || '[]') : (pkg.other_charges || []);
+  const hotelsList   = typeof pkg.hotels        === 'string' ? JSON.parse(pkg.hotels        || '[]') : (pkg.hotels        || []);
+  const transport    = typeof pkg.transport     === 'string' ? JSON.parse(pkg.transport     || '{}') : (pkg.transport     || {});
+  const charges      = typeof pkg.other_charges === 'string' ? JSON.parse(pkg.other_charges || '[]') : (pkg.other_charges || []);
 
   const hotelLines = hotelsList.length
     ? hotelsList.map(h => {
-        const nights   = parseInt(h.nights) || 1;
-        const rooms    = parseInt(h.rooms)  || 1;
-        const perNight = parseInt(h.price)  || 0;
-        const subtotal = nights * rooms * perNight;
-        const catLabel = h.category ? ` [${h.category}]` : '';
-        const roomsLabel = rooms > 1 ? ` × ${rooms} rooms` : '';
+        const nights     = parseInt(h.nights)     || 1;
+        const rooms      = parseInt(h.rooms)      || 1;
+        const perNight   = parseInt(h.price)      || 0;
+        const extraBeds  = parseInt(h.extra_beds) || 0;
+        const subtotal   = nights * rooms * perNight;
+        const catLabel   = h.category  ? ` [${h.category}]`                    : '';
+        const roomsLabel = rooms > 1   ? ` × ${rooms} rooms`                   : '';
+        const extraLabel = extraBeds   ? ` + ${extraBeds} extra ${h.bed_type||'bed'}(s)` : '';
         return `  • ${h.city}: ${h.name}${catLabel}\n` +
-               `    ${nights}N${roomsLabel} × ₹${perNight.toLocaleString('en-IN')}/room = ₹${subtotal.toLocaleString('en-IN')}`;
+               `    ${nights}N${roomsLabel}${extraLabel} × ₹${perNight.toLocaleString('en-IN')}/room = ₹${subtotal.toLocaleString('en-IN')}`;
       }).join('\n')
     : '  (No hotels added)';
 
@@ -1136,90 +1531,133 @@ function sharePackageWhatsApp(pkgId){
 
 // ── LEAD SCORE ────────────────────────────────────────────────
 function renderLeadScore(){
-  const l=leadData; let score=0; const factors=[];
-  const ss={'New Lead':20,'Follow-up':40,'Negotiation':65,'Booked':100,'Lost':0};
-  score+=ss[l.status]||20; factors.push(`Status (${l.status})`);
-  if(l.travel_date){score+=10;factors.push('Travel date ✓');}
-  if(l.tour_category_id){score+=8;factors.push('Category assigned ✓');}
-  if(l.tour_subcategory_id){score+=5;factors.push('Sub-category ✓');}
-  const cc=(l.conversations||[]).length;
-  if(cc>0){score+=Math.min(15,cc*3);factors.push(`${cc} conversation(s)`);}
-  if((l.packages||[]).length>0){score+=10;factors.push('Package created ✓');}
-  if((l.conversations||[]).some(c=>c.call_result==='Interested'||c.call_result==='Package Sent')){score+=10;factors.push('Positive engagement ✓');}
-  if((l.followups||[]).some(f=>f.status==='Pending')){score+=5;factors.push('Follow-up scheduled ✓');}
-  score=Math.min(100,score);
-  const label=score>=80?'🔥 Hot':score>=50?'⚡ Warm':score>=30?'❄️ Cold':'💤 Inactive';
-  const color=score>=80?'var(--red)':score>=50?'var(--yellow)':score>=30?'var(--blue)':'var(--text3)';
-  const badge=document.getElementById('score-badge');
-  badge.textContent=`${score} – ${label}`; badge.style.color=color;
-  document.getElementById('score-bar').style.width=score+'%';
-  document.getElementById('score-bar').style.background=color;
-  document.getElementById('score-factors').textContent=factors.join(' · ');
+  const l = leadData; let score = 0; const factors = [];
+  const ss = {'New Lead':20,'Follow-up':40,'Negotiation':65,'Booked':100,'Lost':0};
+  score += ss[l.status]||20; factors.push(`Status (${l.status})`);
+  if (l.travel_date)          { score += 10; factors.push('Travel date ✓'); }
+  if (l.tour_category_id)     { score += 8;  factors.push('Category assigned ✓'); }
+  if (l.tour_subcategory_id)  { score += 5;  factors.push('Sub-category ✓'); }
+  const cc = (l.conversations||[]).length;
+  if (cc > 0) { score += Math.min(15, cc*3); factors.push(`${cc} conversation(s)`); }
+  if ((l.packages||[]).length > 0) { score += 10; factors.push('Package created ✓'); }
+  if ((l.conversations||[]).some(c=>c.call_result==='Interested'||c.call_result==='Package Sent'))
+    { score += 10; factors.push('Positive engagement ✓'); }
+  if ((l.followups||[]).some(f=>f.status==='Pending')) { score += 5; factors.push('Follow-up scheduled ✓'); }
+  score = Math.min(100, score);
+  const label = score>=80?'🔥 Hot':score>=50?'⚡ Warm':score>=30?'❄️ Cold':'💤 Inactive';
+  const color = score>=80?'var(--red)':score>=50?'var(--yellow)':score>=30?'var(--blue)':'var(--text3)';
+  const badge = document.getElementById('score-badge');
+  badge.textContent = `${score} – ${label}`; badge.style.color = color;
+  document.getElementById('score-bar').style.width      = score + '%';
+  document.getElementById('score-bar').style.background = color;
+  document.getElementById('score-factors').textContent  = factors.join(' · ');
 }
 
-// ── CALL STATS ────────────────────────────────────────────────
+// ── CALL STATS (removed duration from stats) ──────────────────
 function renderCallStats(){
-  const convs=leadData.conversations||[];
-  const total=convs.length;
-  const connected=convs.filter(c=>!['Not Connected','Call Not Picked'].includes(c.call_result)).length;
-  const totalDuration=convs.reduce((s,c)=>s+(parseInt(c.call_duration)||0),0);
-  const lastCall=convs[0];
-  document.getElementById('call-stats-content').innerHTML=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div style="background:var(--surface2);border-radius:8px;padding:10px;text-align:center"><div style="font-size:22px;font-weight:700;color:var(--accent)">${total}</div><div style="font-size:11px;color:var(--text3)">Total Calls</div></div><div style="background:var(--surface2);border-radius:8px;padding:10px;text-align:center"><div style="font-size:22px;font-weight:700;color:var(--green)">${connected}</div><div style="font-size:11px;color:var(--text3)">Connected</div></div><div style="background:var(--surface2);border-radius:8px;padding:10px;text-align:center"><div style="font-size:22px;font-weight:700;color:var(--blue)">${totalDuration}</div><div style="font-size:11px;color:var(--text3)">Total Mins</div></div><div style="background:var(--surface2);border-radius:8px;padding:10px;text-align:center"><div style="font-size:16px;font-weight:600;color:var(--text)">${lastCall?lastCall.call_result:'—'}</div><div style="font-size:11px;color:var(--text3)">Last Result</div></div></div>`;
+  const convs = leadData.conversations||[];
+  const total     = convs.length;
+  const connected = convs.filter(c => !['Not Interested','Cancel','Customer Busy'].includes(c.call_result)).length;
+  const lastCall  = convs[0];
+  document.getElementById('call-stats-content').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div style="background:var(--surface2);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:22px;font-weight:700;color:var(--accent)">${total}</div>
+        <div style="font-size:11px;color:var(--text3)">Total Calls</div>
+      </div>
+      <div style="background:var(--surface2);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:22px;font-weight:700;color:var(--green)">${connected}</div>
+        <div style="font-size:11px;color:var(--text3)">Positive</div>
+      </div>
+      <div style="background:var(--surface2);border-radius:8px;padding:10px;text-align:center;grid-column:span 2">
+        <div style="font-size:15px;font-weight:600;color:var(--text)">${lastCall?lastCall.call_result:'—'}</div>
+        <div style="font-size:11px;color:var(--text3)">Last Result</div>
+      </div>
+    </div>`;
 }
 
 // ── PINNED NOTES ──────────────────────────────────────────────
 function renderPinnedNotes(){
-  const notes=leadData.pinned_notes||[];const el=document.getElementById('pinned-notes-list');
-  if(!notes.length){el.innerHTML='<div style="color:var(--text3);font-size:12px;text-align:center;padding:10px">No pinned notes</div>';return;}
-  const C={yellow:'#F59E0B',blue:'#3B82F6',green:'#10B981',red:'#EF4444'};
-  el.innerHTML=notes.map(n=>`<div style="display:flex;gap:8px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--border)"><div style="width:4px;min-height:36px;border-radius:4px;background:${C[n.color]||C.yellow};flex-shrink:0"></div><div style="flex:1;font-size:12px">${n.note}</div><button class="btn btn-sm" style="padding:2px 6px;font-size:10px;color:var(--text3)" onclick="deleteNote(${n.id})"><i class="fas fa-times"></i></button></div>`).join('');
+  const notes = leadData.pinned_notes||[]; const el = document.getElementById('pinned-notes-list');
+  if (!notes.length) { el.innerHTML='<div style="color:var(--text3);font-size:12px;text-align:center;padding:10px">No pinned notes</div>'; return; }
+  const C = {yellow:'#F59E0B',blue:'#3B82F6',green:'#10B981',red:'#EF4444'};
+  el.innerHTML = notes.map(n => `
+    <div style="display:flex;gap:8px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="width:4px;min-height:36px;border-radius:4px;background:${C[n.color]||C.yellow};flex-shrink:0"></div>
+      <div style="flex:1;font-size:12px">${n.note}</div>
+      <button class="btn btn-sm" style="padding:2px 6px;font-size:10px;color:var(--text3)" onclick="deleteNote(${n.id})"><i class="fas fa-times"></i></button>
+    </div>`).join('');
 }
 
-function openAddNoteModal(){document.getElementById('note-text').value='';selectNoteColor('yellow');document.getElementById('note-modal').classList.add('show');}
-function selectNoteColor(color){selectedNoteColor=color;['yellow','blue','green','red'].forEach(c=>{const el=document.getElementById('nc-'+c);if(el)el.querySelector('i').style.display=(c===color)?'block':'none';});}
+function openAddNoteModal(){ document.getElementById('note-text').value=''; selectNoteColor('yellow'); document.getElementById('note-modal').classList.add('show'); }
+function selectNoteColor(color){
+  selectedNoteColor = color;
+  ['yellow','blue','green','red'].forEach(c => {
+    const el = document.getElementById('nc-'+c);
+    if (el) el.querySelector('i').style.display = (c===color) ? 'block' : 'none';
+  });
+}
 
 async function saveNote(){
-  const note=document.getElementById('note-text').value.trim();if(!note){toast('Please enter a note','error');return;}
-  try{await apiFetch(`/api/leads/${LEAD_ID}/notes`,{method:'POST',body:JSON.stringify({note,color:selectedNoteColor})});toast('Note pinned!','success');closeModal('note-modal');await loadLead();}catch(e){toast(e.message,'error');}
+  const note = document.getElementById('note-text').value.trim(); if (!note) { toast('Please enter a note','error'); return; }
+  try { await apiFetch(`/api/leads/${LEAD_ID}/notes`, { method:'POST', body:JSON.stringify({note, color:selectedNoteColor}) }); toast('Note pinned!','success'); closeModal('note-modal'); await loadLead(); } catch(e) { toast(e.message,'error'); }
 }
 
 async function deleteNote(noteId){
-  if(!confirm('Delete this note?')) return;
-  try{await apiFetch(`/api/notes/${noteId}`,{method:'DELETE'});toast('Note deleted','success');await loadLead();}catch(e){toast(e.message,'error');}
+  if (!confirm('Delete this note?')) return;
+  try { await apiFetch(`/api/notes/${noteId}`, { method:'DELETE' }); toast('Note deleted','success'); await loadLead(); } catch(e) { toast(e.message,'error'); }
 }
 
 // ── DUPLICATE ─────────────────────────────────────────────────
 async function duplicateLead(){
-  if(!confirm('Duplicate this lead?')) return;
-  const l=leadData;
-  const payload={customer_name:l.customer_name,mobile:l.mobile,alt_mobile:l.alt_mobile,email:l.email,city:l.city,tour_name:l.tour_name,travel_date:l.travel_date,adults:l.adults,children:l.children,hotel_category:l.hotel_category,meal_plan:l.meal_plan,vehicle_type:l.vehicle_type,lead_source:l.lead_source,assigned_to:l.assigned_to,status:'New Lead',notes:`Duplicated from ${l.lead_id}`,tour_category_id:l.tour_category_id,tour_subcategory_id:l.tour_subcategory_id};
-  try{const res=await apiFetch('/api/leads',{method:'POST',body:JSON.stringify(payload)});toast(`Lead duplicated! New ID: ${res.lead_id}`,'success');setTimeout(()=>window.location.href=`/leads/${res.id}`,1200);}catch(e){toast(e.message,'error');}
+  if (!confirm('Duplicate this lead?')) return;
+  const l = leadData;
+  const payload = {customer_name:l.customer_name,mobile:l.mobile,alt_mobile:l.alt_mobile,email:l.email,city:l.city,tour_name:l.tour_name,travel_date:l.travel_date,adults:l.adults,children:l.children,hotel_category:l.hotel_category,meal_plan:l.meal_plan,vehicle_type:l.vehicle_type,lead_source:l.lead_source,assigned_to:l.assigned_to,status:'New Lead',notes:`Duplicated from ${l.lead_id}`,tour_category_id:l.tour_category_id,tour_subcategory_id:l.tour_subcategory_id};
+  try {
+    const res = await apiFetch('/api/leads', { method:'POST', body:JSON.stringify(payload) });
+    toast(`Lead duplicated! New ID: ${res.lead_id}`, 'success');
+    setTimeout(() => window.location.href = `/leads/${res.id}`, 1200);
+  } catch(e) { toast(e.message,'error'); }
 }
 
 // ── HISTORY & FOLLOWUPS ───────────────────────────────────────
 function renderHistory(){
-  const el=document.getElementById('history-list');
-  if(!leadData.history||!leadData.history.length){el.innerHTML='<div class="empty-state"><i class="fas fa-history"></i><h3>No previous records</h3><p>First enquiry for this mobile number</p></div>';return;}
-  el.innerHTML=leadData.history.map(h=>`<a href="/leads/${h.id}" style="display:block;padding:12px;border-bottom:1px solid var(--border);text-decoration:none;color:var(--text)"><div style="display:flex;justify-content:space-between;align-items:center"><div><code style="color:var(--accent);font-size:11px">${h.lead_id}</code><div style="font-size:13px;margin-top:2px">${h.tour_name||'No tour specified'}</div></div><div style="text-align:right">${statusBadge(h.status)}<div style="font-size:11px;color:var(--text3);margin-top:4px">${formatDate(h.created_at)}</div></div></div></a>`).join('');
+  const el = document.getElementById('history-list');
+  if (!leadData.history||!leadData.history.length) {
+    el.innerHTML='<div class="empty-state"><i class="fas fa-history"></i><h3>No previous records</h3><p>First enquiry for this mobile number</p></div>'; return;
+  }
+  el.innerHTML = leadData.history.map(h => `
+    <a href="/leads/${h.id}" style="display:block;padding:12px;border-bottom:1px solid var(--border);text-decoration:none;color:var(--text)">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div><code style="color:var(--accent);font-size:11px">${h.lead_id}</code><div style="font-size:13px;margin-top:2px">${h.tour_name||'No tour specified'}</div></div>
+        <div style="text-align:right">${statusBadge(h.status)}<div style="font-size:11px;color:var(--text3);margin-top:4px">${formatDate(h.created_at)}</div></div>
+      </div>
+    </a>`).join('');
 }
 
 function renderFollowups(){
-  const el=document.getElementById('upcoming-followups');
-  const pending=(leadData.followups||[]).filter(f=>f.status==='Pending');
-  if(!pending.length){el.innerHTML='<div style="color:var(--text3);font-size:12px;text-align:center;padding:12px">No upcoming follow-ups</div>';return;}
-  el.innerHTML=pending.map(f=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)"><div><div style="font-size:12px;font-weight:600">${formatDate(f.followup_date)}</div><div style="font-size:11px;color:var(--text3)">${f.notes||''}</div></div><button class="btn btn-sm btn-success" onclick="completeFollowup(${f.id})"><i class="fas fa-check"></i></button></div>`).join('');
+  const el = document.getElementById('upcoming-followups');
+  const pending = (leadData.followups||[]).filter(f => f.status==='Pending');
+  if (!pending.length) { el.innerHTML='<div style="color:var(--text3);font-size:12px;text-align:center;padding:12px">No upcoming follow-ups</div>'; return; }
+  el.innerHTML = pending.map(f => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div>
+        <div style="font-size:12px;font-weight:600">${formatDate(f.followup_date)}</div>
+        <div style="font-size:11px;color:var(--text3)">${f.notes||''}</div>
+      </div>
+      <button class="btn btn-sm btn-success" onclick="completeFollowup(${f.id})"><i class="fas fa-check"></i></button>
+    </div>`).join('');
 }
 
-async function completeFollowup(id){await apiFetch(`/api/followups/${id}/complete`,{method:'POST'});toast('Follow-up completed','success');await loadLead();}
-
-function closeModal(id){document.getElementById(id).classList.remove('show');}
+async function completeFollowup(id){ await apiFetch(`/api/followups/${id}/complete`,{method:'POST'}); toast('Follow-up completed','success'); await loadLead(); }
+function closeModal(id){ document.getElementById(id).classList.remove('show'); }
 
 function switchTab(name){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('[id^="tab-"]').forEach(t=>t.style.display='none');
   document.getElementById(`tab-${name}`).style.display='block';
   const map={timeline:'time',package:'pack',booking:'book',payments:'pay',whatsapp:'what',history:'hist'};
-  const kw=map[name]||name.substring(0,4);
+  const kw = map[name]||name.substring(0,4);
   document.querySelectorAll('.tab').forEach(t=>{if(t.textContent.toLowerCase().includes(kw)||t.innerHTML.toLowerCase().includes(name))t.classList.add('active');});
 }
 

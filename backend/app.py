@@ -165,7 +165,7 @@ def get_leads():
     assigned = request.args.get('assigned_to', '')
     offset = (page - 1) * per_page
 
-    where = []
+    where = ["l.is_deleted=0"]
     params = []
 
     if identity['role'] == 'staff':
@@ -272,7 +272,7 @@ def get_lead(lid):
     lead = db_query("""
         SELECT l.*, u.full_name as assigned_name 
         FROM leads l LEFT JOIN users u ON l.assigned_to=u.id 
-        WHERE l.id=%s""", (lid,))
+        WHERE l.id=%s AND l.is_deleted=0""", (lid,))
     if not lead:
         return jsonify({'error': 'Not found'}), 404
     lead = lead[0]
@@ -340,6 +340,41 @@ def get_lead(lid):
     lead['history']        = history or []
     return jsonify(lead)
 
+# @app.route('/api/leads/<int:lid>', methods=['DELETE'])
+# @jwt_required()
+# def delete_lead(lid):
+#     identity = json.loads(get_jwt_identity())
+#     if identity['role'] not in ('admin', 'manager'):
+#         return jsonify({'error': 'Forbidden — only admin/manager can delete leads'}), 403
+    
+#     lead = db_query("SELECT lead_id FROM leads WHERE id=%s", (lid,))
+#     if not lead:
+#         return jsonify({'error': 'Not found'}), 404
+#     lead_id_str = lead[0]['lead_id']
+    
+#     # Cascade: delete child records first (FK safety for tables without ON DELETE CASCADE)
+#     db_execute("DELETE FROM followups WHERE lead_id=%s", (lid,))
+#     db_execute("DELETE FROM conversations WHERE lead_id=%s", (lid,))
+#     db_execute("DELETE FROM packages WHERE lead_id=%s", (lid,))
+#     db_execute("DELETE FROM whatsapp_logs WHERE lead_id=%s", (lid,))
+#     db_execute("DELETE FROM lead_notes WHERE lead_id=%s", (lid,))
+    
+#     # Delete payments tied to this lead's booking
+#     booking = db_query("SELECT id FROM bookings WHERE lead_id=%s", (lid,))
+#     if booking:
+#         db_execute("DELETE FROM payments WHERE booking_id=%s", (booking[0]['id'],))
+#     db_execute("DELETE FROM bookings WHERE lead_id=%s", (lid,))
+    
+#     db_execute("DELETE FROM leads WHERE id=%s", (lid,))
+    
+#     db_execute(
+#         "INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details) VALUES (%s,'DELETE_LEAD','lead',%s,%s)",
+#         (identity['id'], lid, f"Deleted lead {lead_id_str}")
+#     )
+#     return jsonify({'message': f'Lead {lead_id_str} deleted'})
+
+
+
 @app.route('/api/leads/<int:lid>', methods=['DELETE'])
 @jwt_required()
 def delete_lead(lid):
@@ -347,32 +382,20 @@ def delete_lead(lid):
     if identity['role'] not in ('admin', 'manager'):
         return jsonify({'error': 'Forbidden — only admin/manager can delete leads'}), 403
     
-    lead = db_query("SELECT lead_id FROM leads WHERE id=%s", (lid,))
+    lead = db_query("SELECT lead_id FROM leads WHERE id=%s AND is_deleted=0", (lid,))
     if not lead:
         return jsonify({'error': 'Not found'}), 404
     lead_id_str = lead[0]['lead_id']
     
-    # Cascade: delete child records first (FK safety for tables without ON DELETE CASCADE)
-    db_execute("DELETE FROM followups WHERE lead_id=%s", (lid,))
-    db_execute("DELETE FROM conversations WHERE lead_id=%s", (lid,))
-    db_execute("DELETE FROM packages WHERE lead_id=%s", (lid,))
-    db_execute("DELETE FROM whatsapp_logs WHERE lead_id=%s", (lid,))
-    db_execute("DELETE FROM lead_notes WHERE lead_id=%s", (lid,))
-    
-    # Delete payments tied to this lead's booking
-    booking = db_query("SELECT id FROM bookings WHERE lead_id=%s", (lid,))
-    if booking:
-        db_execute("DELETE FROM payments WHERE booking_id=%s", (booking[0]['id'],))
-    db_execute("DELETE FROM bookings WHERE lead_id=%s", (lid,))
-    
-    db_execute("DELETE FROM leads WHERE id=%s", (lid,))
-    
     db_execute(
-        "INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details) VALUES (%s,'DELETE_LEAD','lead',%s,%s)",
-        (identity['id'], lid, f"Deleted lead {lead_id_str}")
+        "UPDATE leads SET is_deleted=1, deleted_at=NOW(), deleted_by=%s WHERE id=%s",
+        (identity['id'], lid)
     )
-    return jsonify({'message': f'Lead {lead_id_str} deleted'})
-
+    db_execute(
+        "INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details) VALUES (%s,'SOFT_DELETE_LEAD','lead',%s,%s)",
+        (identity['id'], lid, f"Soft-deleted lead {lead_id_str}")
+    )
+    return jsonify({'message': f'Lead {lead_id_str} moved to trash'})
 
 @app.route('/api/leads/<int:lid>', methods=['PUT'])
 @jwt_required()
@@ -407,37 +430,75 @@ def assign_lead(lid):
     return jsonify({'message': 'Assigned'})
 
 # ─── CONVERSATIONS ────────────────────────────────────────────
+# @app.route('/api/leads/<int:lid>/conversations', methods=['POST'])
+# @jwt_required()
+# def add_conversation(lid):
+#     identity = json.loads(get_jwt_identity())
+#     data = request.get_json()
+#     cid = db_execute("""
+#         INSERT INTO conversations (lead_id, user_id, summary, call_result, call_type, next_followup_date)
+#         VALUES (%s,%s,%s,%s,%s,%s)
+#     """, (lid, identity['id'], data.get('summary',''), data.get('call_result',''),
+#           data.get('call_type','Outgoing'), data.get('next_followup_date')))
+    
+#     if data.get('next_followup_date'):
+#         db_execute("""
+#             INSERT INTO followups (lead_id, user_id, followup_date, notes, status)
+#             VALUES (%s,%s,%s,%s,'Pending')
+#         """, (lid, identity['id'], data['next_followup_date'], data.get('summary','')))
+
+#     if data.get('status_update'):
+#         db_execute("UPDATE leads SET status=%s WHERE id=%s", (data['status_update'], lid))
+
+#     # db_execute("INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details) VALUES (%s,'ADD_CONVERSATION','lead',%s,%s)",
+#     #            (identity['id'], lid, f"Added conversation to lead {lid}"))
+
+#     cid = db_execute("""
+#       INSERT INTO conversations (lead_id, user_id, summary, call_result, call_type,
+#           next_followup_date, call_duration)
+#       VALUES (%s,%s,%s,%s,%s,%s,%s)
+#   """, (lid, identity['id'], data.get('summary',''), data.get('call_result',''),
+#         data.get('call_type','Outgoing'), data.get('next_followup_date'),
+#         data.get('call_duration')))
+#     return jsonify({'id': cid, 'message': 'Conversation added'}), 201
+
+
 @app.route('/api/leads/<int:lid>/conversations', methods=['POST'])
 @jwt_required()
 def add_conversation(lid):
     identity = json.loads(get_jwt_identity())
     data = request.get_json()
+
     cid = db_execute("""
-        INSERT INTO conversations (lead_id, user_id, summary, call_result, call_type, next_followup_date)
+        INSERT INTO conversations
+            (lead_id, user_id, summary, call_result, call_type, next_followup_date)
         VALUES (%s,%s,%s,%s,%s,%s)
-    """, (lid, identity['id'], data.get('summary',''), data.get('call_result',''),
-          data.get('call_type','Outgoing'), data.get('next_followup_date')))
-    
+    """, (
+        lid,
+        identity['id'],
+        data.get('summary', ''),
+        data.get('call_result', ''),
+        data.get('call_type', 'Outgoing'),
+        data.get('next_followup_date')
+    ))
+
     if data.get('next_followup_date'):
         db_execute("""
             INSERT INTO followups (lead_id, user_id, followup_date, notes, status)
             VALUES (%s,%s,%s,%s,'Pending')
-        """, (lid, identity['id'], data['next_followup_date'], data.get('summary','')))
+        """, (lid, identity['id'], data['next_followup_date'], data.get('summary', '')))
 
     if data.get('status_update'):
         db_execute("UPDATE leads SET status=%s WHERE id=%s", (data['status_update'], lid))
 
-    # db_execute("INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details) VALUES (%s,'ADD_CONVERSATION','lead',%s,%s)",
-    #            (identity['id'], lid, f"Added conversation to lead {lid}"))
-
-    cid = db_execute("""
-      INSERT INTO conversations (lead_id, user_id, summary, call_result, call_type,
-          next_followup_date, call_duration)
-      VALUES (%s,%s,%s,%s,%s,%s,%s)
-  """, (lid, identity['id'], data.get('summary',''), data.get('call_result',''),
-        data.get('call_type','Outgoing'), data.get('next_followup_date'),
-        data.get('call_duration')))
+    db_execute(
+        "INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details) VALUES (%s,'ADD_CONVERSATION','lead',%s,%s)",
+        (identity['id'], lid, f"Added conversation to lead {lid}")
+    )
     return jsonify({'id': cid, 'message': 'Conversation added'}), 201
+
+
+
 
 # ─── FOLLOWUPS ────────────────────────────────────────────────
 @app.route('/api/followups', methods=['GET'])
@@ -1283,6 +1344,69 @@ INSERT INTO tour_subcategories (category_id, name, tags) VALUES
 ((SELECT id FROM tour_categories WHERE name='Customise Tour'), 'Pilgrimage Tour',   'Religious, Pilgrimage'),
 ((SELECT id FROM tour_categories WHERE name='Customise Tour'), 'Budget Tour',       'Budget');
 """
+
+
+@app.route('/api/leads/trash', methods=['GET'])
+@jwt_required()
+def get_trash():
+    identity = json.loads(get_jwt_identity())
+    if identity['role'] not in ('admin', 'manager'):
+        return jsonify({'error': 'Forbidden'}), 403
+    leads = db_query("""
+        SELECT l.*, u.full_name as assigned_name, d.full_name as deleted_by_name
+        FROM leads l
+        LEFT JOIN users u ON l.assigned_to=u.id
+        LEFT JOIN users d ON l.deleted_by=d.id
+        WHERE l.is_deleted=1
+        ORDER BY l.deleted_at DESC
+    """)
+    return jsonify(leads or [])
+
+
+@app.route('/api/leads/<int:lid>/restore', methods=['POST'])
+@jwt_required()
+def restore_lead(lid):
+    identity = json.loads(get_jwt_identity())
+    if identity['role'] not in ('admin', 'manager'):
+        return jsonify({'error': 'Forbidden'}), 403
+    lead = db_query("SELECT lead_id FROM leads WHERE id=%s AND is_deleted=1", (lid,))
+    if not lead:
+        return jsonify({'error': 'Not found or not deleted'}), 404
+    db_execute(
+        "UPDATE leads SET is_deleted=0, deleted_at=NULL, deleted_by=NULL WHERE id=%s", (lid,)
+    )
+    db_execute(
+        "INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details) VALUES (%s,'RESTORE_LEAD','lead',%s,%s)",
+        (identity['id'], lid, f"Restored lead {lead[0]['lead_id']}")
+    )
+    return jsonify({'message': f"Lead {lead[0]['lead_id']} restored"})
+
+
+@app.route('/api/leads/<int:lid>/permanent-delete', methods=['DELETE'])
+@jwt_required()
+def permanent_delete_lead(lid):
+    identity = json.loads(get_jwt_identity())
+    if identity['role'] != 'admin':
+        return jsonify({'error': 'Forbidden — admin only'}), 403
+    lead = db_query("SELECT lead_id FROM leads WHERE id=%s AND is_deleted=1", (lid,))
+    if not lead:
+        return jsonify({'error': 'Not found in trash'}), 404
+    lead_id_str = lead[0]['lead_id']
+    db_execute("DELETE FROM followups     WHERE lead_id=%s", (lid,))
+    db_execute("DELETE FROM conversations WHERE lead_id=%s", (lid,))
+    db_execute("DELETE FROM packages      WHERE lead_id=%s", (lid,))
+    db_execute("DELETE FROM whatsapp_logs WHERE lead_id=%s", (lid,))
+    db_execute("DELETE FROM lead_notes    WHERE lead_id=%s", (lid,))
+    booking = db_query("SELECT id FROM bookings WHERE lead_id=%s", (lid,))
+    if booking:
+        db_execute("DELETE FROM payments WHERE booking_id=%s", (booking[0]['id'],))
+    db_execute("DELETE FROM bookings WHERE lead_id=%s", (lid,))
+    db_execute("DELETE FROM leads    WHERE id=%s",      (lid,))
+    db_execute(
+        "INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details) VALUES (%s,'PERMANENT_DELETE_LEAD','lead',%s,%s)",
+        (identity['id'], lid, f"Permanently deleted lead {lead_id_str}")
+    )
+    return jsonify({'message': f'Lead {lead_id_str} permanently deleted'})
 
 
 if __name__ == '__main__':
