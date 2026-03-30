@@ -38,7 +38,7 @@ def db_query(sql, params=None, fetch=True):
     if not conn:
         return None
     try:
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(dictionary=True, buffered=True)
         cursor.execute(sql, params or ())
         if fetch:
             result = cursor.fetchall()
@@ -224,6 +224,9 @@ def create_lead():
     db_execute("INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details) VALUES (%s,'CREATE_LEAD','lead',%s,%s)",
                (identity['id'], lid, f"Created lead {lead_id}"))
     return jsonify({'id': lid, 'lead_id': lead_id, 'message': 'Lead created'}), 201
+
+
+
 
 # @app.route('/api/leads/<int:lid>', methods=['GET'])
 # @jwt_required()
