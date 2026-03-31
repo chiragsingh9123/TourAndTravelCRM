@@ -661,7 +661,7 @@ def get_followups():
         where.append("DATE(f.followup_date)<%s AND f.status='Pending'")
         params.append(today)
     elif filter_type == 'upcoming':
-        where.append("DATE(f.followup_date)>%s AND f.status='Pending'")
+        where.append("DATE(f.followup_date)>%s")
         params.append(tomorrow)
 
     where.append("f.status='Pending'")
