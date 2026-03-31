@@ -10,7 +10,7 @@
   </div>
 </div>
 
-<div style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:24px">
+<div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:24px">
   <div class="stat-card red" style="cursor:pointer" onclick="loadFollowups('overdue')">
     <div class="stat-label">Overdue</div>
     <div class="stat-value" id="count-overdue">—</div>
@@ -26,6 +26,11 @@
     <div class="stat-value" id="count-tomorrow">—</div>
     <i class="fas fa-calendar-plus stat-icon"></i>
   </div>
+  <div class="stat-card green" style="cursor:pointer" onclick="loadFollowups('upcoming')">
+    <div class="stat-label">Upcoming</div>
+    <div class="stat-value" id="count-upcoming">—</div>
+    <i class="fas fa-calendar-alt stat-icon"></i>
+</div>
 </div>
 
 <div class="tabs">
@@ -50,7 +55,7 @@
 let currentFilter = 'today';
 
 async function loadCounts() {
-  for (const f of ['overdue','today','tomorrow']) {
+  for (const f of ['overdue','today','tomorrow','upcoming']) {
     const data = await apiFetch(`/api/followups?filter=${f}`);
     document.getElementById(`count-${f}`).textContent = data ? data.length : 0;
   }
@@ -70,7 +75,9 @@ async function loadFollowups(filter = 'today') {
     const messages = {
       overdue: "No overdue follow-ups! You're on top of things.",
       today: "No follow-ups scheduled for today.",
-      tomorrow: "No follow-ups scheduled for tomorrow."
+      tomorrow: "No follow-ups scheduled for tomorrow.",
+      upcoming: "No upcoming follow-ups scheduled beyond tomorrow."
+
     };
     el.innerHTML = `<div class="empty-state"><i class="fas fa-check-circle" style="color:var(--green)"></i><h3>All clear!</h3><p>${messages[filter]}</p></div>`;
     return;
@@ -104,7 +111,7 @@ async function loadFollowups(filter = 'today') {
                 <td style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${f.tour_name||'—'}</td>
                 <td><code style="font-size:11px; color:var(--text3)">${f.lead_id}</code></td>
                 <td>
-                  <span style="color:${isOverdue?'var(--red)':filter==='today'?'var(--yellow)':'var(--blue)'}; font-weight:600">
+                  <span style="color:${isOverdue ? 'var(--red)' : filter==='today' ? 'var(--yellow)' : filter==='tomorrow' ? 'var(--blue)' : 'var(--green)'}; font-weight:600">
                     ${formatDate(f.followup_date)}
                   </span>
                 </td>
