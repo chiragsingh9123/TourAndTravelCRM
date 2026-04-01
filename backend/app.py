@@ -58,6 +58,38 @@ def db_query(sql, params=None, fetch=True):
 def db_execute(sql, params=None):
     return db_query(sql, params, fetch=False)
 
+
+def db_query2(sql, params=None, fetch=True):
+    conn = get_db()
+    if not conn:
+        return None
+    try:
+        cursor = conn.cursor(dictionary=True, buffered=True)
+        cursor.execute(sql, params or ())
+        if fetch:
+            result = cursor.fetchall()
+        else:
+            conn.commit()
+            last_id = cursor.lastrowid
+            if not last_id:
+                cursor.execute("SELECT LAST_INSERT_ID() AS id")
+                row = cursor.fetchone()
+                last_id = row['id'] if row else None
+            result = last_id
+        cursor.close()
+        conn.close()
+        return result
+    except Error as e:
+        print(f"Query Error: {e}")
+        if conn:
+            conn.close()
+        return None
+
+def db_execute2(sql, params=None):
+    return db_query(sql, params, fetch=False)
+
+
+
 # ─── AUTH ─────────────────────────────────────────────────────
 @app.route('/api/auth/login', methods=['POST'])
 def login():
@@ -802,37 +834,109 @@ def update_package(pid):
 # ─── BOOKINGS ─────────────────────────────────────────────────
 def next_booking_id():
     year = datetime.now().year
-    row = db_query("SELECT COUNT(*) as cnt FROM bookings WHERE YEAR(created_at)=%s", (year,))
-    n = (row[0]['cnt'] if row else 0) + 1
-    return f"BOOKING-{year}-{n:05d}"
+    row = db_query("""
+        SELECT booking_id FROM bookings
+        WHERE booking_id LIKE %s
+        ORDER BY id DESC LIMIT 1
+    """, (f"BOOKING-{year}-%",))
+    if row and row[0]['booking_id']:
+        last_num = int(row[0]['booking_id'].split('-')[-1])
+        next_num = last_num + 1
+    else:
+        next_num = 1
+    return f"BOOKING-{year}-{next_num:05d}"
 
 @app.route('/api/leads/<int:lid>/book', methods=['POST'])
 @jwt_required()
 def create_booking(lid):
-    identity = json.loads(get_jwt_identity())
-    data = request.get_json()
-    booking_id = next_booking_id()
-    bid = db_execute("""
-        INSERT INTO bookings (booking_id, lead_id, user_id, total_amount, discount, 
-            final_amount, advance_paid, balance, payment_method, payment_date, notes)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-    """, (booking_id, lid, identity['id'],
-          data.get('total_amount',0), data.get('discount',0), data.get('final_amount',0),
-          data.get('advance_paid',0), data.get('balance',0),
-          data.get('payment_method','Cash'), data.get('payment_date', datetime.now().date()),
-          data.get('notes','')))
-    db_execute("UPDATE leads SET status='Booked' WHERE id=%s", (lid,))
-    
-    if data.get('advance_paid',0) > 0:
-        db_execute("""
-            INSERT INTO payments (booking_id, amount, payment_method, payment_date, notes)
-            VALUES (%s,%s,%s,%s,'Advance payment')
-        """, (bid, data['advance_paid'], data.get('payment_method','Cash'),
-              data.get('payment_date', datetime.now().date())))
-    
-    db_execute("INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details) VALUES (%s,'CREATE_BOOKING','booking',%s,%s)",
-               (identity['id'], bid, f"Created booking {booking_id}"))
-    return jsonify({'id': bid, 'booking_id': booking_id, 'message': 'Booking created'}), 201
+    try:
+        identity = json.loads(get_jwt_identity())
+        data = request.get_json()
+
+        if not data:
+            return jsonify({'error': 'Invalid JSON'}), 400
+
+        # Validate lead exists
+        lead = db_query2("SELECT id FROM leads WHERE id=%s AND is_deleted=0", (lid,))
+        if not lead:
+            return jsonify({'error': 'Lead not found'}), 404
+
+        # Check no duplicate booking
+        existing = db_query2("SELECT id, booking_id FROM bookings WHERE lead_id=%s", (lid,))
+        if existing:
+            return jsonify({
+                'error': f"Booking already exists for this lead: {existing[0]['booking_id']}"
+            }), 409
+
+        booking_id = next_booking_id()
+
+        total_amount  = float(data.get('total_amount',  0) or 0)
+        discount      = float(data.get('discount',      0) or 0)
+        final_amount  = float(data.get('final_amount',  0) or 0)
+        advance_paid  = float(data.get('advance_paid',  0) or 0)
+        balance       = float(data.get('balance',       0) or 0)
+        payment_method = data.get('payment_method', 'Cash')
+        notes          = data.get('notes', '')
+
+        payment_date = data.get('payment_date')
+        if payment_date:
+            try:
+                payment_date = datetime.strptime(payment_date, "%Y-%m-%d").date()
+            except:
+                payment_date = datetime.now().date()
+        else:
+            payment_date = datetime.now().date()
+
+        print(f"[BOOKING] Inserting booking {booking_id} for lead {lid}")
+
+        bid = db_execute2("""
+            INSERT INTO bookings (booking_id, lead_id, user_id, total_amount, discount,
+                final_amount, advance_paid, balance, payment_method, payment_date, notes)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        """, (
+            booking_id, lid, identity['id'],
+            total_amount, discount, final_amount,
+            advance_paid, balance,
+            payment_method, payment_date, notes
+        ))
+
+        print(f"[BOOKING] db_execute returned bid={bid}")
+
+        if not bid:
+            return jsonify({'error': 'Database insert failed — bid is None'}), 500
+
+        # Update lead status
+        db_execute2("UPDATE leads SET status='Booked' WHERE id=%s", (lid,))
+
+        # Record advance payment if any
+        if advance_paid > 0:
+            pid = db_execute2("""
+                INSERT INTO payments (booking_id, amount, payment_method, payment_date, notes)
+                VALUES (%s,%s,%s,%s,%s)
+            """, (bid, advance_paid, payment_method, payment_date, 'Advance payment'))
+            print(f"[BOOKING] Payment inserted pid={pid}")
+
+        # Activity log
+        db_execute2("""
+            INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details)
+            VALUES (%s,'CREATE_BOOKING','booking',%s,%s)
+        """, (identity['id'], bid, f"Created booking {booking_id} for lead {lid}"))
+
+        print(f"[BOOKING] Done — booking_id={booking_id}, bid={bid}")
+
+        return jsonify({
+            'id':         bid,
+            'booking_id': booking_id,
+            'message':    'Booking created successfully'
+        }), 201
+
+    except Exception as e:
+        import traceback
+        print(f"[BOOKING ERROR] {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+
 
 @app.route('/api/bookings', methods=['GET'])
 @jwt_required()
