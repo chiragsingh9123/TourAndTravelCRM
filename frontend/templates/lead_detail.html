@@ -883,16 +883,21 @@ function renderPackages() {
 }
 
 function initPackage() {
-  currentPkgId=null; itineraryDays=[]; hotels=[]; otherCharges=[];
-  document.getElementById('pkg_name').value = leadData.tour_name||'';
-  document.getElementById('pkg_vehicle').value = leadData.vehicle_type||'Sedan';
-  document.getElementById('pkg_transport_cost').value='';
-  document.getElementById('pkg_discount').value='0';
-  document.getElementById('pkg_notes').value='';
-  document.getElementById('itinerary-days').innerHTML='';
-  document.getElementById('hotel-list').innerHTML='';
-  document.getElementById('charges-list').innerHTML='';
-  document.getElementById('package-form').style.display='block';
+  currentPkgId = null;
+  // ✅ BUG 2 FIX: fully reset arrays AND clear DOM before starting fresh
+  itineraryDays = [];
+  hotels        = [];
+  otherCharges  = [];
+  document.getElementById('itinerary-days').innerHTML = '';
+  document.getElementById('hotel-list').innerHTML     = '';
+  document.getElementById('charges-list').innerHTML   = '';
+
+  document.getElementById('pkg_name').value           = leadData.tour_name || '';
+  document.getElementById('pkg_vehicle').value        = leadData.vehicle_type || 'Sedan';
+  document.getElementById('pkg_transport_cost').value = '';
+  document.getElementById('pkg_discount').value       = '0';
+  document.getElementById('pkg_notes').value          = '';
+  document.getElementById('package-form').style.display = 'block';
   updateQuickFillBar(); recalcTotal();
 }
 
@@ -1160,69 +1165,191 @@ def add_conversation(lid):
 */
 
 // ─── CHANGE 1 & 2: addHotel with Extra Bed count + Bed Type ──
-function addHotel(){
+// function addHotel(){
+//   const idx = hotels.length;
+//   hotels.push({ city:'', name:'', category:'Standard', nights:1, rooms:1, price:0, extra_beds:0, bed_type:'Double Bed' });
+//   const div = document.createElement('div');
+//   // 9-column grid: City | Hotel Name | Category | Nights | Rooms | ₹/Night/Room | Extra Beds | Bed Type | Delete
+//   div.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 100px 50px 50px 110px 80px 100px 36px;gap:6px;margin-bottom:10px;align-items:end;padding:10px;background:var(--surface2);border-radius:8px';
+//   div.innerHTML = `
+//     <div class="form-group" style="margin:0">
+//       <label style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.4px">City</label>
+//       <input type="text" class="form-control" placeholder="e.g. Varanasi" oninput="hotels[${idx}].city=this.value">
+//     </div>
+//     <div class="form-group" style="margin:0">
+//       <label style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.4px">Hotel Name</label>
+//       <input type="text" class="form-control" placeholder="Hotel name" oninput="hotels[${idx}].name=this.value">
+//     </div>
+//     <div class="form-group" style="margin:0">
+//       <label style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.4px">Category</label>
+//       <select class="form-control" onchange="hotels[${idx}].category=this.value">
+//         ${buildHotelCategoryOptions('Standard')}
+//       </select>
+//     </div>
+//     <div class="form-group" style="margin:0">
+//       <label style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.4px">Nights</label>
+//       <input type="number" class="form-control" value="1" min="1"
+//         oninput="hotels[${idx}].nights=parseInt(this.value)||1;recalcTotal()">
+//     </div>
+//     <div class="form-group" style="margin:0">
+//       <label style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.4px">Rooms</label>
+//       <input type="number" class="form-control" value="1" min="1"
+//         oninput="hotels[${idx}].rooms=parseInt(this.value)||1;recalcTotal()">
+//     </div>
+//     <div class="form-group" style="margin:0">
+//       <label style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.4px">₹/Night/Room</label>
+//       <input type="number" class="form-control" placeholder="0"
+//         oninput="hotels[${idx}].price=parseInt(this.value)||0;recalcTotal()">
+//     </div>
+//     <!-- CHANGE 1: Extra Bed count -->
+//     <div class="form-group" style="margin:0">
+//       <label style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.4px">Extra Bed</label>
+//       <input type="number" class="form-control" value="0" min="0" placeholder="0"
+//         oninput="hotels[${idx}].extra_beds=parseInt(this.value)||0;recalcTotal()"
+//         title="Number of extra beds">
+//     </div>
+//     <!-- CHANGE 2: Bed Type (Double/Triple/Single) -->
+//     <div class="form-group" style="margin:0">
+//       <label style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.4px">Bed Type</label>
+//       <select class="form-control" onchange="hotels[${idx}].bed_type=this.value">
+//         ${buildBedTypeOptions('Double Bed')}
+//       </select>
+//     </div>
+//     <button class="btn btn-danger btn-sm" style="margin-bottom:0;align-self:flex-end"
+//       onclick="this.parentElement.remove();hotels.splice(${idx},1);recalcTotal()">
+//       <i class="fas fa-trash"></i>
+//     </button>`;
+//   document.getElementById('hotel-list').appendChild(div);
+// }
+
+// ── HOTEL ROW — checkbox-revealed extra bed ───────────────────
+function addHotel() {
   const idx = hotels.length;
   hotels.push({ city:'', name:'', category:'Standard', nights:1, rooms:1, price:0, extra_beds:0, bed_type:'Double Bed' });
+
   const div = document.createElement('div');
-  // 9-column grid: City | Hotel Name | Category | Nights | Rooms | ₹/Night/Room | Extra Beds | Bed Type | Delete
-  div.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 100px 50px 50px 110px 80px 100px 36px;gap:6px;margin-bottom:10px;align-items:end;padding:10px;background:var(--surface2);border-radius:8px';
+  div.className = 'hotel-row';
+  div.style.cssText = 'background:var(--surface2);border-radius:10px;padding:12px;margin-bottom:12px;border:1px solid var(--border)';
   div.innerHTML = `
-    <div class="form-group" style="margin:0">
-      <label style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.4px">City</label>
-      <input type="text" class="form-control" placeholder="e.g. Varanasi" oninput="hotels[${idx}].city=this.value">
+    <div style="display:grid;grid-template-columns:1fr 1fr 120px;gap:10px;margin-bottom:10px">
+      <div class="form-group" style="margin:0">
+        <label style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px">City</label>
+        <input type="text" class="form-control" placeholder="e.g. Varanasi"
+          oninput="hotels[${idx}].city=this.value">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Hotel Name</label>
+        <input type="text" class="form-control" placeholder="Hotel name"
+          oninput="hotels[${idx}].name=this.value">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Category</label>
+        <select class="form-control" onchange="hotels[${idx}].category=this.value">
+          ${buildHotelCategoryOptions('Standard')}
+        </select>
+      </div>
     </div>
-    <div class="form-group" style="margin:0">
-      <label style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.4px">Hotel Name</label>
-      <input type="text" class="form-control" placeholder="Hotel name" oninput="hotels[${idx}].name=this.value">
+
+    <div style="display:grid;grid-template-columns:80px 80px 140px 1fr;gap:10px;align-items:end">
+      <div class="form-group" style="margin:0">
+        <label style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Nights</label>
+        <input type="number" class="form-control" value="1" min="1"
+          oninput="hotels[${idx}].nights=parseInt(this.value)||1;recalcTotal()">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Rooms</label>
+        <input type="number" class="form-control" value="1" min="1"
+          oninput="hotels[${idx}].rooms=parseInt(this.value)||1;recalcTotal()">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px">₹ / Night / Room</label>
+        <input type="number" class="form-control" placeholder="0"
+          oninput="hotels[${idx}].price=parseInt(this.value)||0;recalcTotal()">
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;padding-bottom:4px">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text3);cursor:pointer;white-space:nowrap">
+          <input type="checkbox" id="extra-bed-chk-${idx}" style="width:15px;height:15px"
+            onchange="toggleExtraBed(${idx}, this.checked)">
+          Extra Bed
+        </label>
+        <button class="btn btn-danger btn-sm"
+          onclick="this.closest('.hotel-row').remove();hotels.splice(${idx},1);recalcTotal()"
+          style="padding:4px 10px">
+          <i class="fas fa-trash"></i>
+        </button>
+      </div>
     </div>
-    <div class="form-group" style="margin:0">
-      <label style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.4px">Category</label>
-      <select class="form-control" onchange="hotels[${idx}].category=this.value">
-        ${buildHotelCategoryOptions('Standard')}
-      </select>
-    </div>
-    <div class="form-group" style="margin:0">
-      <label style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.4px">Nights</label>
-      <input type="number" class="form-control" value="1" min="1"
-        oninput="hotels[${idx}].nights=parseInt(this.value)||1;recalcTotal()">
-    </div>
-    <div class="form-group" style="margin:0">
-      <label style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.4px">Rooms</label>
-      <input type="number" class="form-control" value="1" min="1"
-        oninput="hotels[${idx}].rooms=parseInt(this.value)||1;recalcTotal()">
-    </div>
-    <div class="form-group" style="margin:0">
-      <label style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.4px">₹/Night/Room</label>
-      <input type="number" class="form-control" placeholder="0"
-        oninput="hotels[${idx}].price=parseInt(this.value)||0;recalcTotal()">
-    </div>
-    <!-- CHANGE 1: Extra Bed count -->
-    <div class="form-group" style="margin:0">
-      <label style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.4px">Extra Bed</label>
-      <input type="number" class="form-control" value="0" min="0" placeholder="0"
-        oninput="hotels[${idx}].extra_beds=parseInt(this.value)||0;recalcTotal()"
-        title="Number of extra beds">
-    </div>
-    <!-- CHANGE 2: Bed Type (Double/Triple/Single) -->
-    <div class="form-group" style="margin:0">
-      <label style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.4px">Bed Type</label>
-      <select class="form-control" onchange="hotels[${idx}].bed_type=this.value">
-        ${buildBedTypeOptions('Double Bed')}
-      </select>
-    </div>
-    <button class="btn btn-danger btn-sm" style="margin-bottom:0;align-self:flex-end"
-      onclick="this.parentElement.remove();hotels.splice(${idx},1);recalcTotal()">
-      <i class="fas fa-trash"></i>
-    </button>`;
+
+    <!-- Extra bed row — hidden by default -->
+    <div id="extra-bed-row-${idx}" style="display:none;margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)">
+      <div style="display:grid;grid-template-columns:100px 160px 1fr;gap:10px;align-items:end">
+        <div class="form-group" style="margin:0">
+          <label style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Count</label>
+          <input type="number" class="form-control" value="1" min="1" id="extra-bed-count-${idx}"
+            oninput="hotels[${idx}].extra_beds=parseInt(this.value)||0;recalcTotal()">
+        </div>
+        <div class="form-group" style="margin:0">
+          <label style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Bed Type</label>
+          <select class="form-control" id="extra-bed-type-${idx}"
+            onchange="hotels[${idx}].bed_type=this.value">
+            ${buildBedTypeOptions('Double Bed')}
+          </select>
+        </div>
+        <div style="font-size:12px;color:var(--text3);padding-bottom:8px">
+          <i class="fas fa-info-circle"></i> Extra bed cost not included in auto-calc — add in Other Charges if needed.
+        </div>
+      </div>
+    </div>`;
+
   document.getElementById('hotel-list').appendChild(div);
 }
 
-function addItineraryDay(){
-  const idx=itineraryDays.length; itineraryDays.push({day:idx+1,description:''});
-  const div=document.createElement('div');
-  div.style.cssText='display:flex;gap:8px;margin-bottom:8px;align-items:flex-start';
-  div.innerHTML=`<div style="padding:6px 10px;background:var(--accent);color:#fff;border-radius:6px;font-size:12px;font-weight:700;white-space:nowrap;margin-top:2px">Day ${idx+1}</div><input type="text" class="form-control" placeholder="e.g., Arrive Prayagraj, local sightseeing" oninput="itineraryDays[${idx}].description=this.value"><button class="btn btn-danger btn-sm" onclick="this.parentElement.remove();itineraryDays.splice(${idx},1)"><i class="fas fa-trash"></i></button>`;
+function toggleExtraBed(idx, checked) {
+  const row = document.getElementById(`extra-bed-row-${idx}`);
+  if (row) row.style.display = checked ? 'block' : 'none';
+  if (!checked) {
+    hotels[idx].extra_beds = 0;
+    hotels[idx].bed_type   = 'Double Bed';
+    recalcTotal();
+  } else {
+    hotels[idx].extra_beds = parseInt(document.getElementById(`extra-bed-count-${idx}`)?.value) || 1;
+  }
+}
+
+function addItineraryDay() {
+  // ✅ BUG 1 FIX: always count existing rendered days for day label,
+  // not stale itineraryDays.length which carries over between packages
+  const existingDays = document.getElementById('itinerary-days').children.length;
+  const dayNum = existingDays + 1;
+  const idx = itineraryDays.length;
+  itineraryDays.push({ day: dayNum, description: '' });
+
+  const div = document.createElement('div');
+  div.style.cssText = 'display:flex;gap:8px;margin-bottom:8px;align-items:flex-start';
+  div.innerHTML = `
+    <div style="padding:6px 10px;background:var(--accent);color:#fff;border-radius:6px;font-size:12px;font-weight:700;white-space:nowrap;margin-top:2px;min-width:50px;text-align:center">
+      Day ${dayNum}
+    </div>
+    <input type="text" class="form-control"
+      placeholder="e.g., Arrive Prayagraj, Triveni Sangam visit"
+      oninput="itineraryDays[${idx}].description=this.value">
+    <button class="btn btn-danger btn-sm"
+      onclick="this.parentElement.remove();itineraryDays.splice(${idx},1);renumberItineraryDays()">
+      <i class="fas fa-trash"></i>
+    </button>`;
   document.getElementById('itinerary-days').appendChild(div);
+}
+
+// ✅ BUG 1 FIX: renumber day labels after any deletion
+function renumberItineraryDays() {
+  const container = document.getElementById('itinerary-days');
+  Array.from(container.children).forEach((row, i) => {
+    const label = row.querySelector('div');
+    if (label) label.textContent = `Day ${i + 1}`;
+    itineraryDays[i] = itineraryDays[i] || { day: i+1, description: '' };
+    itineraryDays[i].day = i + 1;
+  });
 }
 
 function addCharge(){
@@ -1267,67 +1394,245 @@ async function savePackage(){
 }
 
 // ── LOAD PACKAGE FOR EDIT (restores extra_beds + bed_type) ────
-async function loadPackageForEdit(pkgId){
-  const p = await apiFetch(`/api/packages/${pkgId}`); if (!p) return;
+// async function loadPackageForEdit(pkgId){
+//   const p = await apiFetch(`/api/packages/${pkgId}`); if (!p) return;
+//   currentPkgId = pkgId;
+
+//   document.getElementById('pkg_name').value          = p.tour_name||'';
+//   document.getElementById('pkg_transport_cost').value = p.transport?.price||0;
+//   document.getElementById('pkg_vehicle').value        = p.transport?.type||'Sedan';
+//   document.getElementById('pkg_discount').value       = p.discount||0;
+//   document.getElementById('pkg_notes').value          = p.notes||'';
+
+//   // Restore itinerary
+//   itineraryDays = p.itinerary||[];
+//   document.getElementById('itinerary-days').innerHTML = '';
+//   itineraryDays.forEach((day, i) => {
+//     addItineraryDay();
+//     const inputs = document.getElementById('itinerary-days').querySelectorAll('input[type="text"]');
+//     if (inputs[i]) inputs[i].value = day.description||'';
+//     itineraryDays[i].description = day.description||'';
+//   });
+
+//   // Restore hotels (including extra_beds + bed_type)
+//   hotels = p.hotels||[];
+//   document.getElementById('hotel-list').innerHTML = '';
+//   hotels.forEach((h, idx) => {
+//     addHotel();
+//     const row = document.getElementById('hotel-list').children[idx];
+//     if (!row) return;
+//     const textInputs = row.querySelectorAll('input[type="text"]');
+//     const numInputs  = row.querySelectorAll('input[type="number"]');
+//     const selects    = row.querySelectorAll('select');
+
+//     // text inputs: city [0], hotel name [1]
+//     if (textInputs[0]) { textInputs[0].value = h.city||'';   hotels[idx].city   = h.city||''; }
+//     if (textInputs[1]) { textInputs[1].value = h.name||'';   hotels[idx].name   = h.name||''; }
+
+//     // number inputs: nights [0], rooms [1], price [2], extra_beds [3]
+//     if (numInputs[0]) { numInputs[0].value = h.nights||1;      hotels[idx].nights     = parseInt(h.nights)||1; }
+//     if (numInputs[1]) { numInputs[1].value = h.rooms||1;       hotels[idx].rooms      = parseInt(h.rooms)||1;  }
+//     if (numInputs[2]) { numInputs[2].value = h.price||0;       hotels[idx].price      = parseInt(h.price)||0;  }
+//     if (numInputs[3]) { numInputs[3].value = h.extra_beds||0;  hotels[idx].extra_beds = parseInt(h.extra_beds)||0; }
+
+//     // selects: category [0], bed_type [1]
+//     if (selects[0]) { selects[0].value = h.category||'Standard';   hotels[idx].category  = h.category||'Standard';  }
+//     if (selects[1]) { selects[1].value = h.bed_type||'Double Bed';  hotels[idx].bed_type  = h.bed_type||'Double Bed'; }
+//   });
+
+//   // Restore other charges
+//   otherCharges = p.other_charges||[];
+//   document.getElementById('charges-list').innerHTML = '';
+//   otherCharges.forEach((c, idx) => {
+//     addCharge();
+//     const row = document.getElementById('charges-list').children[idx];
+//     if (!row) return;
+//     const inputs = row.querySelectorAll('input');
+//     if (inputs[0]) { inputs[0].value = c.name||'';   otherCharges[idx].name   = c.name||''; }
+//     if (inputs[1]) { inputs[1].value = c.amount||0;  otherCharges[idx].amount = parseInt(c.amount)||0; }
+//   });
+
+//   document.getElementById('package-form').style.display = 'block';
+//   updateQuickFillBar(); recalcTotal(); switchTab('package');
+// }
+
+
+
+async function loadPackageForEdit(pkgId) {
+  const p = await apiFetch(`/api/packages/${pkgId}`);
+  if (!p) return;
   currentPkgId = pkgId;
 
-  document.getElementById('pkg_name').value          = p.tour_name||'';
-  document.getElementById('pkg_transport_cost').value = p.transport?.price||0;
-  document.getElementById('pkg_vehicle').value        = p.transport?.type||'Sedan';
-  document.getElementById('pkg_discount').value       = p.discount||0;
-  document.getElementById('pkg_notes').value          = p.notes||'';
-
-  // Restore itinerary
-  itineraryDays = p.itinerary||[];
+  // ✅ Reset everything first — arrays AND DOM
+  itineraryDays = [];
+  hotels        = [];
+  otherCharges  = [];
   document.getElementById('itinerary-days').innerHTML = '';
-  itineraryDays.forEach((day, i) => {
-    addItineraryDay();
-    const inputs = document.getElementById('itinerary-days').querySelectorAll('input[type="text"]');
-    if (inputs[i]) inputs[i].value = day.description||'';
-    itineraryDays[i].description = day.description||'';
+  document.getElementById('hotel-list').innerHTML     = '';
+  document.getElementById('charges-list').innerHTML   = '';
+
+  // Basic fields
+  document.getElementById('pkg_name').value           = p.tour_name || '';
+  document.getElementById('pkg_transport_cost').value = p.transport?.price || 0;
+  document.getElementById('pkg_vehicle').value        = p.transport?.type  || 'Sedan';
+  document.getElementById('pkg_discount').value       = p.discount || 0;
+  document.getElementById('pkg_notes').value          = p.notes    || '';
+
+  // ── RESTORE ITINERARY (build DOM directly, never call addItineraryDay) ──
+  (p.itinerary || []).forEach((day, i) => {
+    itineraryDays.push({ day: i + 1, description: day.description || '' });
+    const div = document.createElement('div');
+    div.style.cssText = 'display:flex;gap:8px;margin-bottom:8px;align-items:flex-start';
+    div.innerHTML = `
+      <div style="padding:6px 10px;background:var(--accent);color:#fff;border-radius:6px;font-size:12px;font-weight:700;white-space:nowrap;margin-top:2px;min-width:50px;text-align:center">
+        Day ${i + 1}
+      </div>
+      <input type="text" class="form-control"
+        value="${(day.description || '').replace(/"/g, '&quot;')}"
+        oninput="itineraryDays[${i}].description=this.value">
+      <button class="btn btn-danger btn-sm"
+        onclick="this.parentElement.remove();itineraryDays.splice(${i},1);renumberItineraryDays()">
+        <i class="fas fa-trash"></i>
+      </button>`;
+    document.getElementById('itinerary-days').appendChild(div);
   });
 
-  // Restore hotels (including extra_beds + bed_type)
-  hotels = p.hotels||[];
-  document.getElementById('hotel-list').innerHTML = '';
-  hotels.forEach((h, idx) => {
-    addHotel();
-    const row = document.getElementById('hotel-list').children[idx];
-    if (!row) return;
-    const textInputs = row.querySelectorAll('input[type="text"]');
-    const numInputs  = row.querySelectorAll('input[type="number"]');
-    const selects    = row.querySelectorAll('select');
+  // ── RESTORE HOTELS (build DOM directly, never call addHotel) ──
+  (p.hotels || []).forEach((h, idx) => {
+    hotels.push({
+      city:       h.city                || '',
+      name:       h.name                || '',
+      category:   h.category            || 'Standard',
+      nights:     parseInt(h.nights)    || 1,
+      rooms:      parseInt(h.rooms)     || 1,
+      price:      parseInt(h.price)     || 0,
+      extra_beds: parseInt(h.extra_beds)|| 0,
+      bed_type:   h.bed_type            || 'Double Bed'
+    });
 
-    // text inputs: city [0], hotel name [1]
-    if (textInputs[0]) { textInputs[0].value = h.city||'';   hotels[idx].city   = h.city||''; }
-    if (textInputs[1]) { textInputs[1].value = h.name||'';   hotels[idx].name   = h.name||''; }
+    const hasExtraBed = (parseInt(h.extra_beds) || 0) > 0;
 
-    // number inputs: nights [0], rooms [1], price [2], extra_beds [3]
-    if (numInputs[0]) { numInputs[0].value = h.nights||1;      hotels[idx].nights     = parseInt(h.nights)||1; }
-    if (numInputs[1]) { numInputs[1].value = h.rooms||1;       hotels[idx].rooms      = parseInt(h.rooms)||1;  }
-    if (numInputs[2]) { numInputs[2].value = h.price||0;       hotels[idx].price      = parseInt(h.price)||0;  }
-    if (numInputs[3]) { numInputs[3].value = h.extra_beds||0;  hotels[idx].extra_beds = parseInt(h.extra_beds)||0; }
+    const div = document.createElement('div');
+    div.className = 'hotel-row';
+    div.style.cssText = 'background:var(--surface2);border-radius:10px;padding:12px;margin-bottom:12px;border:1px solid var(--border)';
+    div.innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr 120px;gap:10px;margin-bottom:10px">
+        <div class="form-group" style="margin:0">
+          <label style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px">City</label>
+          <input type="text" class="form-control"
+            value="${(h.city || '').replace(/"/g, '&quot;')}"
+            oninput="hotels[${idx}].city=this.value">
+        </div>
+        <div class="form-group" style="margin:0">
+          <label style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Hotel Name</label>
+          <input type="text" class="form-control"
+            value="${(h.name || '').replace(/"/g, '&quot;')}"
+            oninput="hotels[${idx}].name=this.value">
+        </div>
+        <div class="form-group" style="margin:0">
+          <label style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Category</label>
+          <select class="form-control" onchange="hotels[${idx}].category=this.value">
+            ${buildHotelCategoryOptions(h.category || 'Standard')}
+          </select>
+        </div>
+      </div>
 
-    // selects: category [0], bed_type [1]
-    if (selects[0]) { selects[0].value = h.category||'Standard';   hotels[idx].category  = h.category||'Standard';  }
-    if (selects[1]) { selects[1].value = h.bed_type||'Double Bed';  hotels[idx].bed_type  = h.bed_type||'Double Bed'; }
+      <div style="display:grid;grid-template-columns:80px 80px 140px 1fr;gap:10px;align-items:end">
+        <div class="form-group" style="margin:0">
+          <label style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Nights</label>
+          <input type="number" class="form-control" value="${parseInt(h.nights) || 1}" min="1"
+            oninput="hotels[${idx}].nights=parseInt(this.value)||1;recalcTotal()">
+        </div>
+        <div class="form-group" style="margin:0">
+          <label style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Rooms</label>
+          <input type="number" class="form-control" value="${parseInt(h.rooms) || 1}" min="1"
+            oninput="hotels[${idx}].rooms=parseInt(this.value)||1;recalcTotal()">
+        </div>
+        <div class="form-group" style="margin:0">
+          <label style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px">₹ / Night / Room</label>
+          <input type="number" class="form-control" value="${parseInt(h.price) || 0}"
+            oninput="hotels[${idx}].price=parseInt(this.value)||0;recalcTotal()">
+        </div>
+        <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;padding-bottom:4px">
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text3);cursor:pointer;white-space:nowrap">
+            <input type="checkbox" id="extra-bed-chk-${idx}" style="width:15px;height:15px"
+              ${hasExtraBed ? 'checked' : ''}
+              onchange="toggleExtraBed(${idx}, this.checked)">
+            Extra Bed
+          </label>
+          <button class="btn btn-danger btn-sm"
+            onclick="this.closest('.hotel-row').remove();hotels.splice(${idx},1);recalcTotal()"
+            style="padding:4px 10px">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+      </div>
+
+      <div id="extra-bed-row-${idx}"
+        style="display:${hasExtraBed ? 'block' : 'none'};margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)">
+        <div style="display:grid;grid-template-columns:100px 160px 1fr;gap:10px;align-items:end">
+          <div class="form-group" style="margin:0">
+            <label style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Count</label>
+            <input type="number" class="form-control"
+              value="${parseInt(h.extra_beds) || 1}" min="1"
+              id="extra-bed-count-${idx}"
+              oninput="hotels[${idx}].extra_beds=parseInt(this.value)||0;recalcTotal()">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Bed Type</label>
+            <select class="form-control" id="extra-bed-type-${idx}"
+              onchange="hotels[${idx}].bed_type=this.value">
+              ${buildBedTypeOptions(h.bed_type || 'Double Bed')}
+            </select>
+          </div>
+          <div style="font-size:12px;color:var(--text3);padding-bottom:8px">
+            <i class="fas fa-info-circle"></i> Add extra bed cost in Other Charges if needed.
+          </div>
+        </div>
+      </div>`;
+
+    document.getElementById('hotel-list').appendChild(div);
   });
 
-  // Restore other charges
-  otherCharges = p.other_charges||[];
-  document.getElementById('charges-list').innerHTML = '';
-  otherCharges.forEach((c, idx) => {
-    addCharge();
-    const row = document.getElementById('charges-list').children[idx];
-    if (!row) return;
-    const inputs = row.querySelectorAll('input');
-    if (inputs[0]) { inputs[0].value = c.name||'';   otherCharges[idx].name   = c.name||''; }
-    if (inputs[1]) { inputs[1].value = c.amount||0;  otherCharges[idx].amount = parseInt(c.amount)||0; }
+  // ── RESTORE OTHER CHARGES (build DOM directly, never call addCharge) ──
+  (p.other_charges || []).forEach((c, idx) => {
+    otherCharges.push({ name: c.name || '', amount: parseInt(c.amount) || 0 });
+
+    const div = document.createElement('div');
+    div.style.cssText = 'display:flex;gap:8px;margin-bottom:8px;align-items:end';
+    div.innerHTML = `
+      <div class="form-group" style="flex:1;margin:0">
+        <input type="text" class="form-control"
+          value="${(c.name || '').replace(/"/g, '&quot;')}"
+          placeholder="Charge name"
+          oninput="otherCharges[${idx}].name=this.value">
+      </div>
+      <div class="form-group" style="width:120px;margin:0">
+        <input type="number" class="form-control"
+          value="${parseInt(c.amount) || 0}"
+          placeholder="₹ Amount"
+          oninput="otherCharges[${idx}].amount=parseInt(this.value)||0;recalcTotal()">
+      </div>
+      <button class="btn btn-danger btn-sm"
+        onclick="this.parentElement.remove();otherCharges.splice(${idx},1);recalcTotal()">
+        <i class="fas fa-trash"></i>
+      </button>`;
+
+    document.getElementById('charges-list').appendChild(div);
   });
 
   document.getElementById('package-form').style.display = 'block';
-  updateQuickFillBar(); recalcTotal(); switchTab('package');
+  updateQuickFillBar();
+  recalcTotal();
+  switchTab('package');
 }
+
+
+
+
+
+
+
 
 function usePackageForBooking(pkgId){
   const pkg = leadData.packages.find(p => p.id === pkgId); if (!pkg) return;

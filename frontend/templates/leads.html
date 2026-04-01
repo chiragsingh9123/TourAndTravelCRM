@@ -14,7 +14,8 @@
 </div>
 
 <div class="filters-bar">
-  <input type="text" class="filter-input" id="search-input" placeholder="🔍  Search name, mobile, tour..." style="min-width:260px">
+  <input type="text" class="filter-input" id="search-input"
+    placeholder="🔍  Search name, mobile, tour..." style="min-width:260px">
   <select class="filter-select" id="status-filter">
     <option value="">All Status</option>
     <option>New Lead</option>
@@ -26,11 +27,13 @@
   <select class="filter-select" id="staff-filter" style="display:none">
     <option value="">All Staff</option>
   </select>
-  <button class="btn btn-secondary btn-sm" onclick="clearFilters()"><i class="fas fa-times"></i> Clear</button>
-  <span id="total-count" style="color:var(--text3); font-size:12px; margin-left:auto"></span>
+  <button class="btn btn-secondary btn-sm" onclick="clearFilters()">
+    <i class="fas fa-times"></i> Clear
+  </button>
+  <span id="total-count" style="color:var(--text3);font-size:12px;margin-left:auto"></span>
 </div>
 
-<div class="card" style="padding:0; overflow:hidden">
+<div class="card" style="padding:0;overflow:hidden">
   <div class="table-wrap">
     <table>
       <thead>
@@ -47,29 +50,63 @@
         </tr>
       </thead>
       <tbody id="leads-tbody">
-        <tr><td colspan="9"><div class="loading"><div class="spinner"></div> Loading leads...</div></td></tr>
+        <tr><td colspan="9">
+          <div class="loading"><div class="spinner"></div> Loading leads...</div>
+        </td></tr>
       </tbody>
     </table>
   </div>
-  <div style="padding:16px 20px; border-top:1px solid var(--border); display:flex; align-items:center; gap:8px" id="pagination-bar">
-    <div id="pagination-btns" style="display:flex; gap:6px"></div>
+  <div style="padding:16px 20px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px"
+    id="pagination-bar">
+    <div id="pagination-btns" style="display:flex;gap:6px"></div>
     <div class="page-info" id="page-info"></div>
   </div>
 </div>
 
+<!-- ── ASSIGN MODAL ─────────────────────────────────────────── -->
 <div class="modal-overlay" id="assign-modal">
-  <div class="modal" style="max-width:400px">
+  <div class="modal" style="max-width:460px">
     <div class="modal-header">
-      <div class="modal-title">Assign Lead</div>
+      <div class="modal-title"><i class="fas fa-user-plus"></i> Assign / Reassign Lead</div>
       <button class="modal-close" onclick="closeLeadModal('assign-modal')">&times;</button>
     </div>
+
+    <!-- Current assignee banner -->
+    <div id="current-assignee-banner"
+      style="background:var(--surface2);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;display:flex;align-items:center;gap:8px">
+      <i class="fas fa-user-tie" style="color:var(--accent)"></i>
+      <span>Currently assigned to: <strong id="current-assignee-name">—</strong></span>
+    </div>
+
     <div class="form-group">
-      <label>Assign To</label>
+      <label>Assign To <span style="color:var(--red)">*</span></label>
       <select class="form-control" id="assign-staff-select"></select>
     </div>
+    <div class="form-group">
+      <label>Reason / Notes <span style="color:var(--text3);font-size:11px">(optional)</span></label>
+      <input type="text" class="form-control" id="assign-notes"
+        placeholder="e.g., Staff on leave, workload balance...">
+    </div>
+
+    <!-- Assignment history inside modal -->
+    <div style="margin-top:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;
+        letter-spacing:.4px;margin-bottom:8px;display:flex;align-items:center;gap:6px">
+        <i class="fas fa-history"></i> Assignment History
+      </div>
+      <div id="assign-history-list"
+        style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:4px 0">
+        <div style="text-align:center;padding:16px;color:var(--text3);font-size:12px">
+          Loading...
+        </div>
+      </div>
+    </div>
+
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeLeadModal('assign-modal')">Cancel</button>
-      <button class="btn btn-primary" onclick="doAssign()">Assign</button>
+      <button class="btn btn-primary" onclick="doAssign()">
+        <i class="fas fa-user-check"></i> Confirm Assignment
+      </button>
     </div>
   </div>
 </div>
@@ -77,42 +114,35 @@
 
 {% block extra_scripts %}
 <script>
-var LD_API = '{{ API_BASE }}';
-var ldCurrentPage = 1;
+var LD_API          = '{{ API_BASE }}';
+var ldCurrentPage   = 1;
 var ldCurrentLeadId = null;
+var ldAllStaff      = [];   // cached staff list
 
 window.addEventListener('load', function() {
-  console.log('[Leads] window.load fired');
-
-  /* search */
   var si = document.getElementById('search-input');
   var st;
   if (si) si.addEventListener('input', function() {
     clearTimeout(st);
     st = setTimeout(function(){ loadLeads(1); }, 400);
   });
-
-  var sf = document.getElementById('status-filter');
-  if (sf) sf.addEventListener('change', function(){ loadLeads(1); });
-
-  var stf = document.getElementById('staff-filter');
-  if (stf) stf.addEventListener('change', function(){ loadLeads(1); });
+  document.getElementById('status-filter').addEventListener('change', function(){ loadLeads(1); });
+  document.getElementById('staff-filter').addEventListener('change',  function(){ loadLeads(1); });
 
   loadStaffFilter();
   loadLeads(1);
 });
 
+// ── LOAD LEADS ────────────────────────────────────────────────
 async function loadLeads(page) {
   page = page || 1;
-  console.log('[Leads] loadLeads page=' + page);
-
   var search = (document.getElementById('search-input').value || '').trim();
   var status = document.getElementById('status-filter').value || '';
   var staff  = document.getElementById('staff-filter').value  || '';
 
   var qs = 'page=' + page + '&per_page=25';
-  if (search) qs += '&search=' + encodeURIComponent(search);
-  if (status) qs += '&status=' + encodeURIComponent(status);
+  if (search) qs += '&search='      + encodeURIComponent(search);
+  if (status) qs += '&status='      + encodeURIComponent(status);
   if (staff)  qs += '&assigned_to=' + encodeURIComponent(staff);
 
   var tbody = document.getElementById('leads-tbody');
@@ -122,153 +152,203 @@ async function loadLeads(page) {
   if (!token) { window.location.href = '/login'; return; }
 
   try {
-    var url = LD_API + '/api/leads?' + qs;
-    console.log('[Leads] GET ' + url);
-    var res = await fetch(url, {
+    var res  = await fetch(LD_API + '/api/leads?' + qs, {
       headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }
     });
-    console.log('[Leads] status=' + res.status);
-
     if (res.status === 401) {
       tbody.innerHTML = errRow('Session expired. <a href="/login" style="color:var(--accent)">Log in again</a>.', 9);
       return;
     }
 
-    var data = await res.json();
-    console.log('[Leads] total=' + data.total);
-
+    var data  = await res.json();
     ldCurrentPage = page;
     var total = data.total || 0;
-    var tc = document.getElementById('total-count');
-    if (tc) tc.textContent = total + ' leads found';
+    document.getElementById('total-count').textContent = total + ' leads found';
 
     var leads = data.leads || [];
     if (!leads.length) {
       tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state"><i class="fas fa-users"></i><h3>No leads found</h3><p>Try adjusting your filters</p></div></td></tr>';
-      var pb = document.getElementById('pagination-btns'); if(pb) pb.innerHTML = '';
-      var pi = document.getElementById('page-info');       if(pi) pi.textContent = '';
+      document.getElementById('pagination-btns').innerHTML = '';
+      document.getElementById('page-info').textContent = '';
       return;
     }
 
+    var userStr = localStorage.getItem('crm_user');
+    var isAdmin = false;
+    try { var u = JSON.parse(userStr); isAdmin = u.role==='admin'||u.role==='manager'; } catch(e){}
+
     tbody.innerHTML = leads.map(function(l) {
-      var altMobile = l.alt_mobile ? '<div style="font-size:11px;color:var(--text3)">'+l.alt_mobile+'</div>' : '';
-      var travelDate = l.travel_date ? ldFmtDate(l.travel_date) : '—';
+      var altMobile   = l.alt_mobile ? '<div style="font-size:11px;color:var(--text3)">'+l.alt_mobile+'</div>' : '';
+      var travelDate  = l.travel_date ? ldFmtDate(l.travel_date) : '—';
       var enquiryDate = ldFmtDate(l.enquiry_date || l.created_at);
+      var assignedCol = '<div style="font-size:12px">'+(l.assigned_name||'Unassigned')+'</div>';
+
+      // Show reassign button for admin/manager
+      var adminBtns = isAdmin
+        ? '<button class="btn btn-icon btn-sm" title="Assign / Reassign"'
+            + ' onclick="openAssignModal('+l.id+',\''+escHtml(l.assigned_name||'Unassigned')+'\')">'
+            + '<i class="fas fa-user-plus"></i></button>'
+        : '';
+
       return '<tr style="cursor:pointer" onclick="window.location=\'/leads/'+l.id+'\'">'
         + '<td><code style="color:var(--accent);font-size:11px;font-weight:600">'+l.lead_id+'</code></td>'
-        + '<td><div style="font-weight:600">'+l.customer_name+'</div><div style="font-size:11px;color:var(--text3)">'+(l.city||'')+'</div></td>'
+        + '<td><div style="font-weight:600">'+escHtml(l.customer_name)+'</div>'
+        +   '<div style="font-size:11px;color:var(--text3)">'+(l.city||'')+'</div></td>'
         + '<td><div>'+l.mobile+'</div>'+altMobile+'</td>'
-        + '<td><div>'+(l.tour_name||'—')+'</div><div style="font-size:11px;color:var(--text3)">'+l.vehicle_type+' · '+l.hotel_category+'</div></td>'
+        + '<td><div>'+(l.tour_name||'—')+'</div>'
+        +   '<div style="font-size:11px;color:var(--text3)">'+l.vehicle_type+' · '+l.hotel_category+'</div></td>'
         + '<td style="color:var(--text2)">'+travelDate+'</td>'
         + '<td>'+ldStatusBadge(l.status)+'</td>'
-        + '<td style="font-size:12px">'+(l.assigned_name||'Unassigned')+'</td>'
+        + '<td>'+assignedCol+'</td>'
         + '<td style="color:var(--text3);font-size:12px">'+enquiryDate+'</td>'
         + '<td onclick="event.stopPropagation()">'
         +   '<div style="display:flex;gap:4px">'
         +   '<a href="/leads/'+l.id+'" class="btn btn-icon btn-sm" title="View"><i class="fas fa-eye"></i></a>'
-        +   '<button class="btn btn-icon btn-sm ld-admin-only" style="display:none" title="Assign" onclick="openAssignModal('+l.id+')"><i class="fas fa-user-plus"></i></button>'
+        +   adminBtns
         +   '</div></td>'
         + '</tr>';
     }).join('');
 
-    /* show admin buttons if admin/manager */
-    var userStr = localStorage.getItem('crm_user');
-    if (userStr) {
-      try {
-        var u = JSON.parse(userStr);
-        if (u.role === 'admin' || u.role === 'manager') {
-          document.querySelectorAll('.ld-admin-only').forEach(function(el){ el.style.display = ''; });
-          var stfEl = document.getElementById('staff-filter');
-          if (stfEl) stfEl.style.display = '';
-        }
-      } catch(e) {}
+    if (isAdmin) {
+      document.getElementById('staff-filter').style.display = '';
     }
 
-    /* pagination */
+    // Pagination
     var totalPages = Math.ceil(total / 25);
-    var pagesEl = document.getElementById('pagination-btns');
     var out = '';
     if (page > 1) out += '<button class="page-btn" onclick="loadLeads('+(page-1)+')"><i class="fas fa-chevron-left"></i></button>';
     for (var p = Math.max(1, page-2); p <= Math.min(totalPages, page+2); p++) {
       out += '<button class="page-btn '+(p===page?'active':'')+'" onclick="loadLeads('+p+')">'+p+'</button>';
     }
     if (page < totalPages) out += '<button class="page-btn" onclick="loadLeads('+(page+1)+')"><i class="fas fa-chevron-right"></i></button>';
-    if (pagesEl) pagesEl.innerHTML = out;
-    var piEl = document.getElementById('page-info');
-    if (piEl) piEl.textContent = 'Page ' + page + ' of ' + totalPages + ' · ' + total + ' total';
+    document.getElementById('pagination-btns').innerHTML = out;
+    document.getElementById('page-info').textContent = 'Page '+page+' of '+totalPages+' · '+total+' total';
 
   } catch(e) {
-    console.error('[Leads] ERROR:', e);
-    tbody.innerHTML = errRow('Connection error: ' + e.message + '<br><button class="btn btn-sm btn-primary" style="margin-top:10px" onclick="loadLeads(1)">Retry</button>', 9);
+    tbody.innerHTML = errRow('Connection error: '+e.message+'<br><button class="btn btn-sm btn-primary" style="margin-top:10px" onclick="loadLeads(1)">Retry</button>', 9);
   }
 }
 
+// ── STAFF FILTER / ASSIGN DROPDOWN ───────────────────────────
 async function loadStaffFilter() {
   var userStr = localStorage.getItem('crm_user');
   if (!userStr) return;
-  try {
-    var u = JSON.parse(userStr);
-    if (u.role === 'staff') return;
-  } catch(e) { return; }
+  try { var u = JSON.parse(userStr); if (u.role==='staff') return; } catch(e){ return; }
 
   var token = localStorage.getItem('crm_token');
   if (!token) return;
-
   try {
     var res = await fetch(LD_API + '/api/users', {
-      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }
+      headers: { 'Authorization': 'Bearer ' + token }
     });
     if (!res.ok) return;
     var users = await res.json();
+    ldAllStaff = users.filter(function(u){ return u.role==='staff' && u.is_active; });
 
-    var sel  = document.getElementById('staff-filter');
-    var asel = document.getElementById('assign-staff-select');
-
-    users.filter(function(u){ return u.role === 'staff' && u.is_active; }).forEach(function(u) {
-      if (sel)  sel.innerHTML  += '<option value="'+u.id+'">'+u.full_name+'</option>';
-      if (asel) asel.innerHTML += '<option value="'+u.id+'">'+u.full_name+'</option>';
+    var sfEl = document.getElementById('staff-filter');
+    ldAllStaff.forEach(function(u) {
+      sfEl.innerHTML += '<option value="'+u.id+'">'+escHtml(u.full_name)+'</option>';
     });
-  } catch(e) { console.warn('[Leads] loadStaffFilter error:', e); }
+  } catch(e) { console.warn('loadStaffFilter error:', e); }
 }
 
-function clearFilters() {
-  var si = document.getElementById('search-input');   if(si) si.value = '';
-  var sf = document.getElementById('status-filter');  if(sf) sf.value = '';
-  var stf = document.getElementById('staff-filter');  if(stf) stf.value = '';
-  loadLeads(1);
-}
-
-function openAssignModal(leadId) {
+// ── ASSIGN MODAL ──────────────────────────────────────────────
+async function openAssignModal(leadId, currentAssigneeName) {
   ldCurrentLeadId = leadId;
-  var m = document.getElementById('assign-modal');
-  if (m) m.classList.add('show');
+
+  // Set current assignee label
+  document.getElementById('current-assignee-name').textContent = currentAssigneeName || 'Unassigned';
+  document.getElementById('assign-notes').value = '';
+
+  // Populate staff dropdown
+  var sel = document.getElementById('assign-staff-select');
+  sel.innerHTML = '<option value="">— Select Staff —</option>';
+  ldAllStaff.forEach(function(u) {
+    sel.innerHTML += '<option value="'+u.id+'">'+escHtml(u.full_name)+'</option>';
+  });
+
+  // Show modal
+  document.getElementById('assign-modal').classList.add('show');
+
+  // Load assignment history
+  loadAssignHistory(leadId);
 }
 
-function closeLeadModal(id) {
-  var m = document.getElementById(id);
-  if (m) m.classList.remove('show');
+async function loadAssignHistory(leadId) {
+  var el    = document.getElementById('assign-history-list');
+  var token = localStorage.getItem('crm_token');
+  try {
+    var res  = await fetch(LD_API + '/api/leads/' + leadId + '/assignments', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    var logs = await res.json();
+
+    if (!logs || !logs.length) {
+      el.innerHTML = '<div style="text-align:center;padding:16px;color:var(--text3);font-size:12px">'
+        + '<i class="fas fa-info-circle"></i> No assignment history yet</div>';
+      return;
+    }
+
+    el.innerHTML = logs.map(function(log) {
+      var fromName = log.from_name || '<span style="color:var(--text3);font-style:italic">Unassigned</span>';
+      var arrow    = '<i class="fas fa-arrow-right" style="color:var(--accent);font-size:10px;margin:0 4px"></i>';
+      var byLine   = 'by <strong>' + escHtml(log.by_name||'—') + '</strong>';
+      var date     = ldFmtDate(log.created_at);
+      var notes    = log.notes
+        ? '<div style="font-size:11px;color:var(--text3);margin-top:2px;font-style:italic">'
+            + '<i class="fas fa-comment-alt" style="font-size:10px"></i> ' + escHtml(log.notes) + '</div>'
+        : '';
+      return '<div style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px">'
+        + '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:2px">'
+        +   '<span style="font-weight:600">' + escHtml(log.from_name||'Unassigned') + '</span>'
+        +   arrow
+        +   '<span style="font-weight:600;color:var(--green)">' + escHtml(log.to_name||'—') + '</span>'
+        +   '<span style="margin-left:auto;color:var(--text3)">' + date + '</span>'
+        + '</div>'
+        + '<div style="color:var(--text3);margin-top:2px">' + byLine + '</div>'
+        + notes
+        + '</div>';
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<div style="padding:12px;color:var(--red);font-size:12px">Failed to load history</div>';
+  }
 }
 
 async function doAssign() {
   var staffId = document.getElementById('assign-staff-select').value;
-  if (!staffId) { if(typeof toast==='function') toast('Please select a staff member', 'error'); return; }
+  var notes   = document.getElementById('assign-notes').value.trim();
+  if (!staffId) {
+    if (typeof toast==='function') toast('Please select a staff member', 'error');
+    return;
+  }
 
   var token = localStorage.getItem('crm_token');
   try {
     await fetch(LD_API + '/api/leads/' + ldCurrentLeadId + '/assign', {
-      method: 'POST',
+      method:  'POST',
       headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ assigned_to: parseInt(staffId) })
+      body:    JSON.stringify({ assigned_to: parseInt(staffId), notes: notes })
     });
     closeLeadModal('assign-modal');
-    if(typeof toast==='function') toast('Lead assigned successfully', 'success');
+    if (typeof toast==='function') toast('Lead assigned successfully', 'success');
     loadLeads(ldCurrentPage);
   } catch(e) {
-    if(typeof toast==='function') toast('Error: ' + e.message, 'error');
+    if (typeof toast==='function') toast('Error: ' + e.message, 'error');
   }
 }
 
-/* ── utils local to this page ── */
+function closeLeadModal(id) {
+  document.getElementById(id).classList.remove('show');
+}
+
+function clearFilters() {
+  document.getElementById('search-input').value  = '';
+  document.getElementById('status-filter').value = '';
+  document.getElementById('staff-filter').value  = '';
+  loadLeads(1);
+}
+
+// ── UTILS ─────────────────────────────────────────────────────
 function ldFmtDate(d) {
   if (!d) return '—';
   try { return new Date(d).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); }
@@ -278,6 +358,10 @@ function ldFmtDate(d) {
 function ldStatusBadge(status) {
   var map = {'New Lead':'new','Follow-up':'followup','Negotiation':'negotiation','Booked':'booked','Lost':'lost'};
   return '<span class="badge badge-'+(map[status]||'new')+'">'+status+'</span>';
+}
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 function errRow(msg, cols) {
