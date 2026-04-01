@@ -552,17 +552,87 @@ def update_lead(lid):
                (identity['id'], lid, f"Updated lead {lid}"))
     return jsonify({'message': 'Updated'})
 
+# @app.route('/api/leads/<int:lid>/assign', methods=['POST'])
+# @jwt_required()
+# def assign_lead(lid):
+#     identity = json.loads(get_jwt_identity())
+#     if identity['role'] not in ('admin','manager'):
+#         return jsonify({'error': 'Forbidden'}), 403
+#     data = request.get_json()
+#     db_execute("UPDATE leads SET assigned_to=%s WHERE id=%s", (data['assigned_to'], lid))
+#     db_execute("INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details) VALUES (%s,'ASSIGN_LEAD','lead',%s,%s)",
+#                (identity['id'], lid, f"Assigned lead {lid} to user {data['assigned_to']}"))
+#     return jsonify({'message': 'Assigned'})
+
+
 @app.route('/api/leads/<int:lid>/assign', methods=['POST'])
 @jwt_required()
 def assign_lead(lid):
     identity = json.loads(get_jwt_identity())
-    if identity['role'] not in ('admin','manager'):
+    if identity['role'] not in ('admin', 'manager'):
         return jsonify({'error': 'Forbidden'}), 403
     data = request.get_json()
-    db_execute("UPDATE leads SET assigned_to=%s WHERE id=%s", (data['assigned_to'], lid))
-    db_execute("INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details) VALUES (%s,'ASSIGN_LEAD','lead',%s,%s)",
-               (identity['id'], lid, f"Assigned lead {lid} to user {data['assigned_to']}"))
+    new_assigned = data.get('assigned_to')
+    notes        = data.get('notes', '')
+
+    if not new_assigned:
+        return jsonify({'error': 'assigned_to is required'}), 400
+
+    # Get current assignee before updating
+    current = db_query("SELECT assigned_to FROM leads WHERE id=%s", (lid,))
+    if not current:
+        return jsonify({'error': 'Lead not found'}), 404
+    old_assigned = current[0]['assigned_to']
+
+    # Update the lead
+    db_execute("UPDATE leads SET assigned_to=%s WHERE id=%s", (new_assigned, lid))
+
+    # Log the assignment history
+    db_execute("""
+        INSERT INTO lead_assignments (lead_id, assigned_from, assigned_to, assigned_by, notes)
+        VALUES (%s, %s, %s, %s, %s)
+    """, (lid, old_assigned, new_assigned, identity['id'], notes))
+
+    # Log activity
+    db_execute("""
+        INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details)
+        VALUES (%s,'REASSIGN_LEAD','lead',%s,%s)
+    """, (identity['id'], lid, f"Reassigned lead {lid} from user {old_assigned} to {new_assigned}"))
+
     return jsonify({'message': 'Assigned'})
+
+
+# New route — fetch assignment history for a lead
+@app.route('/api/leads/<int:lid>/assignments', methods=['GET'])
+@jwt_required()
+def get_lead_assignments(lid):
+    identity = json.loads(get_jwt_identity())
+    if identity['role'] not in ('admin', 'manager'):
+        return jsonify({'error': 'Forbidden'}), 403
+    logs = db_query("""
+        SELECT
+            la.*,
+            uf.full_name  AS from_name,
+            ut.full_name  AS to_name,
+            ub.full_name  AS by_name
+        FROM lead_assignments la
+        LEFT JOIN users uf ON la.assigned_from = uf.id
+        LEFT JOIN users ut ON la.assigned_to   = ut.id
+        LEFT JOIN users ub ON la.assigned_by   = ub.id
+        WHERE la.lead_id = %s
+        ORDER BY la.created_at DESC
+    """, (lid,))
+    return jsonify(logs or [])
+
+
+
+
+
+
+
+
+
+
 
 # ─── CONVERSATIONS ────────────────────────────────────────────
 # @app.route('/api/leads/<int:lid>/conversations', methods=['POST'])
