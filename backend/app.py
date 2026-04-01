@@ -211,6 +211,8 @@ def get_leads():
     return jsonify({'leads': leads or [], 'total': total, 'page': page, 'per_page': per_page})
 
 
+
+
 @app.route('/api/leads', methods=['POST'])
 @jwt_required()
 def create_lead():
@@ -325,6 +327,36 @@ def create_lead():
     except Exception as e:
         print("CREATE LEAD ERROR:", str(e))
         return jsonify({'error': str(e)}), 500
+
+
+# @app.route('/api/leads', methods=['POST'])
+# @jwt_required()
+# def create_lead():
+#     identity = json.loads(get_jwt_identity())
+#     data = request.get_json()
+#     lead_id = next_lead_id()
+    
+#     lid = db_execute("""
+#         INSERT INTO leads (lead_id, customer_name, mobile, alt_mobile, email, city,
+#             tour_name, travel_date, pickup_location, drop_location,
+#             adults, children, hotel_category, meal_plan,
+#             vehicle_type, lead_source, assigned_to, status, enquiry_date, notes)
+#         VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+#     """, (
+#         lead_id, data.get('customer_name'), data.get('mobile'), data.get('alt_mobile',''),
+#         data.get('email',''), data.get('city',''), data.get('tour_name'),
+#         data.get('travel_date'), data.get('pickup_location',''), data.get('drop_location',''),
+#         data.get('adults',1), data.get('children',0),
+#         data.get('hotel_category','Budget'), data.get('meal_plan','MAP'),
+#         data.get('vehicle_type','Sedan'), data.get('lead_source','Call'),
+#         data.get('assigned_to', identity['id']),
+#         data.get('status','New Lead'), data.get('enquiry_date', datetime.now().date()),
+#         data.get('notes','')
+#     ))
+#     db_execute("INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details) VALUES (%s,'CREATE_LEAD','lead',%s,%s)",
+#                (identity['id'], lid, f"Created lead {lead_id}"))
+#     return jsonify({'id': lid, 'lead_id': lead_id, 'message': 'Lead created'}), 201
+
 
 
 
@@ -532,6 +564,38 @@ def assign_lead(lid):
                (identity['id'], lid, f"Assigned lead {lid} to user {data['assigned_to']}"))
     return jsonify({'message': 'Assigned'})
 
+# ─── CONVERSATIONS ────────────────────────────────────────────
+# @app.route('/api/leads/<int:lid>/conversations', methods=['POST'])
+# @jwt_required()
+# def add_conversation(lid):
+#     identity = json.loads(get_jwt_identity())
+#     data = request.get_json()
+#     cid = db_execute("""
+#         INSERT INTO conversations (lead_id, user_id, summary, call_result, call_type, next_followup_date)
+#         VALUES (%s,%s,%s,%s,%s,%s)
+#     """, (lid, identity['id'], data.get('summary',''), data.get('call_result',''),
+#           data.get('call_type','Outgoing'), data.get('next_followup_date')))
+    
+#     if data.get('next_followup_date'):
+#         db_execute("""
+#             INSERT INTO followups (lead_id, user_id, followup_date, notes, status)
+#             VALUES (%s,%s,%s,%s,'Pending')
+#         """, (lid, identity['id'], data['next_followup_date'], data.get('summary','')))
+
+#     if data.get('status_update'):
+#         db_execute("UPDATE leads SET status=%s WHERE id=%s", (data['status_update'], lid))
+
+#     # db_execute("INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details) VALUES (%s,'ADD_CONVERSATION','lead',%s,%s)",
+#     #            (identity['id'], lid, f"Added conversation to lead {lid}"))
+
+#     cid = db_execute("""
+#       INSERT INTO conversations (lead_id, user_id, summary, call_result, call_type,
+#           next_followup_date, call_duration)
+#       VALUES (%s,%s,%s,%s,%s,%s,%s)
+#   """, (lid, identity['id'], data.get('summary',''), data.get('call_result',''),
+#         data.get('call_type','Outgoing'), data.get('next_followup_date'),
+#         data.get('call_duration')))
+#     return jsonify({'id': cid, 'message': 'Conversation added'}), 201
 
 
 @app.route('/api/leads/<int:lid>/conversations', methods=['POST'])
@@ -1338,6 +1402,87 @@ def delete_subcategory(sid):
     return jsonify({'message': 'Deleted'})
  
  
+# ══════════════════════════════════════════════════════════════
+# 3. DATABASE MIGRATION — run once in MySQL
+# ══════════════════════════════════════════════════════════════
+MIGRATION_SQL = """
+-- Tour Categories table
+CREATE TABLE IF NOT EXISTS tour_categories (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    name        VARCHAR(200) NOT NULL,
+    description TEXT,
+    icon        VARCHAR(60)  DEFAULT 'fa-map-marked-alt',
+    color       VARCHAR(20)  DEFAULT '#F97316',
+    sort_order  INT          DEFAULT 0,
+    is_active   TINYINT(1)   DEFAULT 1,
+    created_at  DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+ 
+-- Tour Sub-Categories table
+CREATE TABLE IF NOT EXISTS tour_subcategories (
+    id              INT AUTO_INCREMENT PRIMARY KEY,
+    category_id     INT          NOT NULL,
+    name            VARCHAR(200) NOT NULL,
+    description     TEXT,
+    duration_days   INT          DEFAULT NULL,
+    duration_nights INT          DEFAULT NULL,
+    starting_price  DECIMAL(10,2) DEFAULT NULL,
+    tags            VARCHAR(500) DEFAULT '',
+    sort_order      INT          DEFAULT 0,
+    is_active       TINYINT(1)   DEFAULT 1,
+    created_at      DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (category_id) REFERENCES tour_categories(id) ON DELETE CASCADE
+);
+ 
+-- Link leads to a tour category (optional — for "View Leads" feature)
+ALTER TABLE leads
+    ADD COLUMN IF NOT EXISTS tour_category_id INT DEFAULT NULL,
+    ADD COLUMN IF NOT EXISTS tour_subcategory_id INT DEFAULT NULL;
+ 
+-- Seed default categories matching your 4 requirements
+INSERT INTO tour_categories (name, description, icon, color, sort_order) VALUES
+('Taxi Service',       'Local and outstation taxi, airport transfers, corporate cabs', 'fa-taxi',           '#F59E0B', 1),
+('Nepal Tour Package', 'Full Nepal tour packages — Kathmandu, Pokhara, Chitwan, etc.', 'fa-mountain',       '#10B981', 2),
+('UP Tour Package',    'Uttar Pradesh pilgrim and leisure tours — Ayodhya, Kashi, Mathura, Agra', 'fa-place-of-worship', '#3B82F6', 3),
+('Customise Tour',     'Custom itinerary tours built as per customer requirements',    'fa-sliders-h',      '#8B5CF6', 4);
+ 
+-- Seed sample sub-categories for each
+-- Taxi Service
+INSERT INTO tour_subcategories (category_id, name, duration_days, starting_price, tags) VALUES
+((SELECT id FROM tour_categories WHERE name='Taxi Service'), 'Local City Taxi',      1, 800,   'City, Local'),
+((SELECT id FROM tour_categories WHERE name='Taxi Service'), 'Outstation One-Way',   1, 1500,  'Outstation'),
+((SELECT id FROM tour_categories WHERE name='Taxi Service'), 'Outstation Round Trip',2, 2500,  'Outstation, Round Trip'),
+((SELECT id FROM tour_categories WHERE name='Taxi Service'), 'Airport Transfer',     1, 1200,  'Airport'),
+((SELECT id FROM tour_categories WHERE name='Taxi Service'), 'Corporate Monthly',    30,15000, 'Corporate');
+ 
+-- Nepal Tour
+INSERT INTO tour_subcategories (category_id, name, duration_days, duration_nights, starting_price, tags) VALUES
+((SELECT id FROM tour_categories WHERE name='Nepal Tour Package'), 'Kathmandu Darshan',         4, 3, 8500,  'Kathmandu, Pashupatinath'),
+((SELECT id FROM tour_categories WHERE name='Nepal Tour Package'), 'Kathmandu + Pokhara',       6, 5, 14000, 'Kathmandu, Pokhara'),
+((SELECT id FROM tour_categories WHERE name='Nepal Tour Package'), 'Nepal Grand Tour',          8, 7, 18000, 'Kathmandu, Pokhara, Chitwan'),
+((SELECT id FROM tour_categories WHERE name='Nepal Tour Package'), 'Muktinath Yatra',           6, 5, 22000, 'Muktinath, Religious'),
+((SELECT id FROM tour_categories WHERE name='Nepal Tour Package'), 'Pashupatinath Special',     4, 3, 9000,  'Pashupatinath, Religious');
+ 
+-- UP Tour
+INSERT INTO tour_subcategories (category_id, name, duration_days, duration_nights, starting_price, tags) VALUES
+((SELECT id FROM tour_categories WHERE name='UP Tour Package'), 'Ayodhya Darshan',              2, 1, 3500,  'Ayodhya, Ram Mandir'),
+((SELECT id FROM tour_categories WHERE name='UP Tour Package'), 'Kashi Vishwanath Yatra',       3, 2, 5500,  'Varanasi, Kashi'),
+((SELECT id FROM tour_categories WHERE name='UP Tour Package'), 'Prayagraj Triveni Sangam',     2, 1, 4000,  'Prayagraj, Sangam'),
+((SELECT id FROM tour_categories WHERE name='UP Tour Package'), 'Ayodhya + Kashi + Prayagraj',  5, 4, 10500, 'Ayodhya, Kashi, Prayagraj'),
+((SELECT id FROM tour_categories WHERE name='UP Tour Package'), 'Mathura + Vrindavan + Agra',   3, 2, 6500,  'Mathura, Vrindavan, Agra'),
+((SELECT id FROM tour_categories WHERE name='UP Tour Package'), 'Char Dham UP Yatra',           7, 6, 16000, 'Badrinath, Kedarnath, Gangotri, Yamunotri');
+ 
+-- Customise Tour
+INSERT INTO tour_subcategories (category_id, name, tags) VALUES
+((SELECT id FROM tour_categories WHERE name='Customise Tour'), 'Family Package',    'Family, Custom'),
+((SELECT id FROM tour_categories WHERE name='Customise Tour'), 'Honeymoon Package', 'Honeymoon, Couple'),
+((SELECT id FROM tour_categories WHERE name='Customise Tour'), 'Group Tour',        'Group'),
+((SELECT id FROM tour_categories WHERE name='Customise Tour'), 'Pilgrimage Tour',   'Religious, Pilgrimage'),
+((SELECT id FROM tour_categories WHERE name='Customise Tour'), 'Budget Tour',       'Budget');
+"""
+
 
 @app.route('/api/leads/trash', methods=['GET'])
 @jwt_required()
@@ -1400,6 +1545,10 @@ def permanent_delete_lead(lid):
         (identity['id'], lid, f"Permanently deleted lead {lead_id_str}")
     )
     return jsonify({'message': f'Lead {lead_id_str} permanently deleted'})
+
+
+
+
 
 
 @app.route('/api/leads/<int:lid>/assign', methods=['POST'])
