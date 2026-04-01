@@ -834,17 +834,9 @@ def update_package(pid):
 # ─── BOOKINGS ─────────────────────────────────────────────────
 def next_booking_id():
     year = datetime.now().year
-    row = db_query("""
-        SELECT booking_id FROM bookings
-        WHERE booking_id LIKE %s
-        ORDER BY id DESC LIMIT 1
-    """, (f"BOOKING-{year}-%",))
-    if row and row[0]['booking_id']:
-        last_num = int(row[0]['booking_id'].split('-')[-1])
-        next_num = last_num + 1
-    else:
-        next_num = 1
-    return f"BOOKING-{year}-{next_num:05d}"
+    row = db_query("SELECT COUNT(*) as cnt FROM bookings WHERE YEAR(created_at)=%s", (year,))
+    n = (row[0]['cnt'] if row else 0) + 1
+    return f"BOOKING-{year}-{n:05d}"
 
 @app.route('/api/leads/<int:lid>/book', methods=['POST'])
 @jwt_required()
