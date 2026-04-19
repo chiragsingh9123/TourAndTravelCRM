@@ -164,7 +164,7 @@ INSERT INTO tour_subcategories (category_id, name, tags) VALUES
             <label>Update Lead Status</label>
             <select class="form-control" id="status_update">
               <option value="">— No change —</option>
-              <option>New Lead</option><option>Follow-up</option><option>Negotiation</option><option>Booked</option><option>Lost</option>
+              <option>New Lead</option><option>Follow-up</option><option>Negotiation</option><option>Booked</option><option>Cancelled</option>
             </select>
           </div>
           <div class="form-group" style="display:flex; align-items:flex-end">
@@ -481,7 +481,7 @@ INSERT INTO tour_subcategories (category_id, name, tags) VALUES
       <div class="form-group"><label>Travel Date</label><input type="date" class="form-control" id="edit-travel-date"></div>
       <div class="form-group"><label>Status</label>
         <select class="form-control" id="edit-status">
-          <option>New Lead</option><option>Follow-up</option><option>Negotiation</option><option>Booked</option><option>Lost</option>
+          <option>New Lead</option><option>Follow-up</option><option>Negotiation</option><option>Booked</option><option>Cancelled</option>
         </select>
       </div>
       <div class="form-group">
@@ -1084,7 +1084,7 @@ function renderTimeline() {
         </div>`
       : '';
 
-    const badgeClass = color==='red'?'lost':color==='green'?'booked':color==='yellow'?'followup':'new';
+    const badgeClass = color==='red'?'Cancelled':color==='green'?'booked':color==='yellow'?'followup':'new';
 
     return `
       <div class="timeline-item">
@@ -1837,7 +1837,7 @@ function sharePackageWhatsApp(pkgId){
 // ── LEAD SCORE ────────────────────────────────────────────────
 function renderLeadScore(){
   const l = leadData; let score = 0; const factors = [];
-  const ss = {'New Lead':20,'Follow-up':40,'Negotiation':65,'Booked':100,'Lost':0};
+  const ss = {'New Lead':20,'Follow-up':40,'Negotiation':65,'Booked':100,'Cancelled':0};
   score += ss[l.status]||20; factors.push(`Status (${l.status})`);
   if (l.travel_date)          { score += 10; factors.push('Travel date ✓'); }
   if (l.tour_category_id)     { score += 8;  factors.push('Category assigned ✓'); }
