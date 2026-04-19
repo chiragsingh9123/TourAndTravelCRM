@@ -148,6 +148,7 @@ INSERT INTO tour_subcategories (category_id, name, tags) VALUES
               <option value="Package Sent">Package Sent</option>
               <option value="Booking Confirmed">Booking Confirmed</option>
               <option value="Cancel">Cancel</option>
+              <option value="Plan change">Plan change</option>
               <option value="Customer Busy">Customer Busy</option>
             </select>
           </div>
@@ -164,7 +165,7 @@ INSERT INTO tour_subcategories (category_id, name, tags) VALUES
             <label>Update Lead Status</label>
             <select class="form-control" id="status_update">
               <option value="">— No change —</option>
-              <option>New Lead</option><option>Follow-up</option><option>Negotiation</option><option>Booked</option><option>Cancelled</option>
+              <option>New Lead</option><option>Follow-up</option><option>Negotiation</option><option>Booked</option><option>Cancelled</option><option>Plan change</option>
             </select>
           </div>
           <div class="form-group" style="display:flex; align-items:flex-end">
@@ -620,7 +621,8 @@ const RESULT_COLORS = {
   'Package Sent':       'blue',
   'Booking Confirmed':  'green',
   'Cancel':             'red',
-  'Customer Busy':      'yellow'
+  'Customer Busy':      'yellow',
+  'Plan change':        'orange'
 };
 const RESULT_ICONS = {
   'Interested':         'fa-thumbs-up',
@@ -628,7 +630,8 @@ const RESULT_ICONS = {
   'Package Sent':       'fa-paper-plane',
   'Booking Confirmed':  'fa-check-circle',
   'Cancel':             'fa-ban',
-  'Customer Busy':      'fa-phone-flip'
+  'Customer Busy':      'fa-phone-flip',
+  'Plan change':        'fa-exchange-alt'
 };
 
 const HOTEL_CATEGORIES = ['Standard','Deluxe','2 Star','3 Star','4 Star','5 Star'];
@@ -1837,7 +1840,7 @@ function sharePackageWhatsApp(pkgId){
 // ── LEAD SCORE ────────────────────────────────────────────────
 function renderLeadScore(){
   const l = leadData; let score = 0; const factors = [];
-  const ss = {'New Lead':20,'Follow-up':40,'Negotiation':65,'Booked':100,'Cancelled':0};
+  const ss = {'New Lead':20,'Follow-up':40,'Negotiation':65,'Booked':100,'Cancelled':0, 'Plan change':30};
   score += ss[l.status]||20; factors.push(`Status (${l.status})`);
   if (l.travel_date)          { score += 10; factors.push('Travel date ✓'); }
   if (l.tour_category_id)     { score += 8;  factors.push('Category assigned ✓'); }
@@ -1862,7 +1865,7 @@ function renderLeadScore(){
 function renderCallStats(){
   const convs = leadData.conversations||[];
   const total     = convs.length;
-  const connected = convs.filter(c => !['Not Interested','Cancel','Customer Busy'].includes(c.call_result)).length;
+  const connected = convs.filter(c => !['Not Interested','Cancel','Customer Busy','Plan change'].includes(c.call_result)).length;
   const lastCall  = convs[0];
   document.getElementById('call-stats-content').innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
