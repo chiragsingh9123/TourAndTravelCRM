@@ -700,41 +700,90 @@ def get_lead_assignments(lid):
 #     return jsonify({'id': cid, 'message': 'Conversation added'}), 201
 
 
+# @app.route('/api/leads/<int:lid>/conversations', methods=['POST'])
+# @jwt_required()
+# def add_conversation(lid):
+#     identity = json.loads(get_jwt_identity())
+#     data = request.get_json()
+
+#     cid = db_execute("""
+#         INSERT INTO conversations
+#             (lead_id, user_id, summary, call_result, call_type, next_followup_date)
+#         VALUES (%s,%s,%s,%s,%s,%s)
+#     """, (
+#         lid,
+#         identity['id'],
+#         data.get('summary', ''),
+#         data.get('call_result', ''),
+#         data.get('call_type', 'Outgoing'),
+#         data.get('next_followup_date')
+#     ))
+
+#     if data.get('next_followup_date'):
+#         db_execute("""
+#             INSERT INTO followups (lead_id, user_id, followup_date, notes, status)
+#             VALUES (%s,%s,%s,%s,'Pending')
+#         """, (lid, identity['id'], data['next_followup_date'], data.get('summary', '')))
+
+#     if data.get('status_update'):
+#         db_execute("UPDATE leads SET status=%s WHERE id=%s", (data['status_update'], lid))
+
+#     db_execute(
+#         "INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details) VALUES (%s,'ADD_CONVERSATION','lead',%s,%s)",
+#         (identity['id'], lid, f"Added conversation to lead {lid}")
+#     )
+#     return jsonify({'id': cid, 'message': 'Conversation added'}), 201
+
 @app.route('/api/leads/<int:lid>/conversations', methods=['POST'])
 @jwt_required()
 def add_conversation(lid):
-    identity = json.loads(get_jwt_identity())
-    data = request.get_json()
+    try:
+        identity = get_jwt_identity()
+        if isinstance(identity, str):
+            identity = json.loads(identity)
 
-    cid = db_execute("""
-        INSERT INTO conversations
+        data = request.get_json()
+
+        from datetime import datetime
+        next_date = data.get('next_followup_date')
+        if next_date:
+            next_date = datetime.strptime(next_date, "%Y-%m-%d")
+
+        cid = db_execute("""
+            INSERT INTO conversations
             (lead_id, user_id, summary, call_result, call_type, next_followup_date)
-        VALUES (%s,%s,%s,%s,%s,%s)
-    """, (
-        lid,
-        identity['id'],
-        data.get('summary', ''),
-        data.get('call_result', ''),
-        data.get('call_type', 'Outgoing'),
-        data.get('next_followup_date')
-    ))
+            VALUES (%s,%s,%s,%s,%s,%s)
+        """, (
+            lid,
+            identity['id'],
+            data.get('summary', ''),
+            data.get('call_result', ''),
+            data.get('call_type', 'Outgoing'),
+            next_date
+        ))
 
-    if data.get('next_followup_date'):
-        db_execute("""
-            INSERT INTO followups (lead_id, user_id, followup_date, notes, status)
-            VALUES (%s,%s,%s,%s,'Pending')
-        """, (lid, identity['id'], data['next_followup_date'], data.get('summary', '')))
+        if next_date:
+            db_execute("""
+                INSERT INTO followups (lead_id, user_id, followup_date, notes, status)
+                VALUES (%s,%s,%s,%s,'Pending')
+            """, (lid, identity['id'], next_date, data.get('summary', '')))
 
-    if data.get('status_update'):
-        db_execute("UPDATE leads SET status=%s WHERE id=%s", (data['status_update'], lid))
+        if data.get('status_update'):
+            db_execute(
+                "UPDATE leads SET status=%s WHERE id=%s",
+                (data['status_update'], lid)
+            )
 
-    db_execute(
-        "INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details) VALUES (%s,'ADD_CONVERSATION','lead',%s,%s)",
-        (identity['id'], lid, f"Added conversation to lead {lid}")
-    )
-    return jsonify({'id': cid, 'message': 'Conversation added'}), 201
+        db_execute(
+            "INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details) VALUES (%s,'ADD_CONVERSATION','lead',%s,%s)",
+            (identity['id'], lid, f"Added conversation to lead {lid}")
+        )
 
+        return jsonify({'id': cid, 'message': 'Conversation added'}), 201
 
+    except Exception as e:
+        print("ERROR:", str(e))
+        return jsonify({'error': str(e)}), 500
 
 
 # ─── FOLLOWUPS ────────────────────────────────────────────────
